@@ -1,0 +1,15 @@
+- name: Build docker image
+  docker_image:
+    name: uni_foosball_image
+    force_source: true
+    source: build
+    build:
+      path: "{{ APP_PATH }}"
+      dockerfile: .docker/Dockerfile
+
+- name: Run docker container
+  docker_container:
+    name: UNI_FOOSBALL_BOT
+    image: uni_foosball_image
+    recreate: true
+    restart: true

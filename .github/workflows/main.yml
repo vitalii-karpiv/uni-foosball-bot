@@ -1,0 +1,29 @@
+name: Deploy Uni Foosball bot to AWS
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+        - uses: actions/checkout@v4
+          name: Checkout repository
+        - name: Run playbook
+          uses: dawidd6/action-ansible-playbook@v2
+          with:
+              playbook: .ansible/main.yml
+              key: ${{secrets.SSH_PRIVATE_KEY}}
+              inventory: |
+                [all]
+                ${{secrets.DOMEN}} address=localhost
+              options: |
+                -e GITHUB_REPO=${{github.repository}}
+                -e APP_PATH=/home/ubuntu/apps/uni-foosball-bot
+
+
