@@ -126,7 +126,12 @@ function createPlayerSelectionKeyboard(players, selectedPlayers) {
       callback_data: 'reset_selection'
     });
   }
-  
+  // Always add Cancel button
+  controlRow.push({
+    text: '❌ Cancel',
+    callback_data: 'cancel_match_creation'
+  });
+
   if (controlRow.length > 0) {
     keyboard.push(controlRow);
   }
@@ -180,6 +185,15 @@ async function handlePlayerSelection(callbackQuery) {
          reply_markup: {
            inline_keyboard: keyboard
          }
+       };
+     }
+     
+     // Handle cancel action
+     if (data === 'cancel_match_creation') {
+       matchCreationState.delete(chatId);
+       return {
+         text: '❌ <b>Match creation cancelled.</b>',
+         parse_mode: 'HTML'
        };
      }
      
