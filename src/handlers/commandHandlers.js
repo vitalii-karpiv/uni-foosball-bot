@@ -2,6 +2,9 @@ const playerService = require('../services/playerService');
 const matchService = require('../services/matchService');
 const { getCurrentSeason } = require('../utils/elo');
 
+// TODO: Store match creation state (in production, use Redis or database)
+const matchCreationState = new Map();
+
 /**
  * Handle /register command
  */
@@ -42,62 +45,276 @@ async function handleRegister(msg) {
 }
 
 /**
- * Handle /match command - Record a 2v2 match
+ * Handle /match command - Start interactive match creation
  */
 async function handleMatch(msg) {
   try {
-    const text = msg.text;
-    console.log('🔍 Parsing match command:', text);
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
     
-    // Parse command: /match @p1 @p2 vs @p3 @p4 (first pair always wins)
-    const match = text.match(/^\/match\s+@(\w+)\s+@(\w+)\s+vs\s+@(\w+)\s+@(\w+)$/i);
-    
-    if (!match) {
-      console.log('❌ Invalid match format');
+    // Check if there's already a match creation in progress
+    if (matchCreationState.has(chatId)) {
       return {
-        text: `❌ <b>Invalid match format!</b>\n\nUse: <code>/match @p1 @p2 vs @p3 @p4</code>\n\nExample: <code>/match @john @jane vs @bob @alice</code>\n\n<i>The first pair (@p1 @p2) are the winners.</i>`,
+        text: '❌ <b>Match creation already in progress!</b>\n\nPlease complete the current match or wait for it to timeout.',
         parse_mode: 'HTML'
       };
     }
     
-    const [, p1, p2, p3, p4] = match;
-    console.log('✅ Parsed players:', p1, p2, p3, p4, 'first pair wins');
+    // Get all registered players
+    const players = await playerService.getAllPlayers();
     
-    const team1Usernames = [p1, p2]; // First pair (winners)
-    const team2Usernames = [p3, p4]; // Second pair (losers)
-    const winnerTeam = 1; // First team always wins
+    if (players.length < 4) {
+      return {
+        text: '❌ <b>Not enough players registered!</b>\n\nAt least 4 players need to be registered to create a match. Use /register to add more players.',
+        parse_mode: 'HTML'
+      };
+    }
     
-    const result = await matchService.recordMatch(team1Usernames, team2Usernames, winnerTeam);
+    // Initialize match creation state
+    matchCreationState.set(chatId, {
+      userId: userId,
+      step: 'select_winners',
+      winners: [],
+      losers: [],
+      timestamp: Date.now()
+    });
     
-    const { match: matchRecord, eloResult, winners, losers } = result;
-    
-    // Format Elo changes with + or - sign
-    const formatEloChange = (change) => change >= 0 ? `+${change}` : `${change}`;
+    // Create inline keyboard for player selection
+    const keyboard = createPlayerSelectionKeyboard(players, []);
     
     return {
-      text: `🏆 <b>Match Recorded!</b>\n\n` +
-            `<b>Teams:</b>\n` +
-            `Winners: @${matchRecord.winners[0].username} + @${matchRecord.winners[1].username}\n` +
-            `Losers: @${matchRecord.losers[0].username} + @${matchRecord.losers[1].username}\n\n` +
-            `📊 <b>Elo Changes:</b>\n` +
-            `Winners: ${formatEloChange(eloResult.team1Changes[0])}, ${formatEloChange(eloResult.team1Changes[1])}\n` +
-            `Losers: ${formatEloChange(eloResult.team2Changes[0])}, ${formatEloChange(eloResult.team2Changes[1])}`,
-      parse_mode: 'HTML'
+      text: '🏆 <b>Creating New Match</b>\n\nPlease select <b>2 winners</b> for this match:',
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: keyboard
+      }
     };
   } catch (error) {
     console.error('❌ Error in handleMatch:', error.message);
-    if (error.message.includes('not found')) {
+    throw error;
+  }
+}
+
+/**
+ * Create inline keyboard for player selection
+ */
+function createPlayerSelectionKeyboard(players, selectedPlayers) {
+  const keyboard = [];
+  const playersPerRow = 2;
+  
+  for (let i = 0; i < players.length; i += playersPerRow) {
+    const row = [];
+    for (let j = 0; j < playersPerRow && i + j < players.length; j++) {
+      const player = players[i + j];
+      const isSelected = selectedPlayers.some(p => p.username === player.username);
+      const buttonText = isSelected ? `✅ ${player.name || player.username}` : player.name || player.username;
+      const callbackData = `player_${player.username}`;
+      
+      row.push({
+        text: buttonText,
+        callback_data: callbackData
+      });
+    }
+    keyboard.push(row);
+  }
+  
+  // Add control buttons
+  const controlRow = [];
+  if (selectedPlayers.length > 0) {
+    controlRow.push({
+      text: '🔄 Reset Selection',
+      callback_data: 'reset_selection'
+    });
+  }
+  
+  if (controlRow.length > 0) {
+    keyboard.push(controlRow);
+  }
+  
+  return keyboard;
+}
+
+/**
+ * Handle player selection callback
+ */
+async function handlePlayerSelection(callbackQuery) {
+  try {
+    const chatId = callbackQuery.message.chat.id;
+    const userId = callbackQuery.from.id;
+    const data = callbackQuery.data;
+    
+    const state = matchCreationState.get(chatId);
+    if (!state || state.userId !== userId) {
       return {
-        text: `❌ <b>Player not found!</b>\n\nMake sure all players are registered using /register first.`,
+        text: '❌ <b>Invalid action!</b>\n\nThis match creation session has expired or belongs to another user.',
         parse_mode: 'HTML'
       };
     }
-    if (error.message.includes('must be different')) {
+    
+    // Check if session has expired (5 minutes)
+    if (Date.now() - state.timestamp > 5 * 60 * 1000) {
+      matchCreationState.delete(chatId);
       return {
-        text: `❌ <b>Invalid teams!</b>\n\nAll players must be different.`,
+        text: '❌ <b>Match creation session expired!</b>\n\nPlease start a new match with /match.',
         parse_mode: 'HTML'
       };
     }
+    
+    if (data === 'reset_selection') {
+      // Reset current selection
+      if (state.step === 'select_winners') {
+        state.winners = [];
+      } else {
+        state.losers = [];
+      }
+      
+      const players = await playerService.getAllPlayers();
+             const currentSelection = state.step === 'select_winners' ? state.winners : state.losers;
+       const keyboard = createPlayerSelectionKeyboard(players, currentSelection);
+       
+       const stepText = state.step === 'select_winners' ? '2 winners' : '2 losers';
+       
+       return {
+         text: `🏆 <b>Creating New Match</b>\n\nPlease select <b>${stepText}</b> for this match:`,
+         parse_mode: 'HTML',
+         reply_markup: {
+           inline_keyboard: keyboard
+         }
+       };
+     }
+     
+     if (data.startsWith('player_')) {
+       const selectedUsername = data.replace('player_', '');
+       const player = await playerService.getPlayerByUsername(selectedUsername);
+       
+       if (!player) {
+         return {
+           text: '❌ <b>Player not found!</b>\n\nPlease try again.',
+           parse_mode: 'HTML'
+         };
+       }
+       
+              const currentSelectionForPlayer = state.step === 'select_winners' ? state.winners : state.losers;
+       const isAlreadySelected = currentSelectionForPlayer.some(p => p.username === player.username);
+      
+      if (isAlreadySelected) {
+        // Remove player from selection
+        if (state.step === 'select_winners') {
+          state.winners = state.winners.filter(p => p.username !== player.username);
+        } else {
+          state.losers = state.losers.filter(p => p.username !== player.username);
+        }
+      } else {
+        // Add player to selection
+        if (state.step === 'select_winners') {
+          if (state.winners.length >= 2) {
+            return {
+              text: '❌ <b>Maximum 2 winners selected!</b>\n\nPlease deselect a player first.',
+              parse_mode: 'HTML'
+            };
+          }
+          state.winners.push(player);
+        } else {
+          if (state.losers.length >= 2) {
+            return {
+              text: '❌ <b>Maximum 2 losers selected!</b>\n\nPlease deselect a player first.',
+              parse_mode: 'HTML'
+            };
+          }
+          state.losers.push(player);
+        }
+      }
+      
+             // Update keyboard
+       const players = await playerService.getAllPlayers();
+       const currentSelectionForKeyboard = state.step === 'select_winners' ? state.winners : state.losers;
+       const keyboard = createPlayerSelectionKeyboard(players, currentSelectionForKeyboard);
+       
+       // Add continue button if 2 players selected
+       if (currentSelectionForKeyboard.length === 2) {
+        keyboard.push([{
+          text: '➡️ Continue',
+          callback_data: 'continue_selection'
+        }]);
+      }
+      
+      const stepText = state.step === 'select_winners' ? '2 winners' : '2 losers';
+      const selectedText = currentSelectionForKeyboard.map(p => p.name || p.username).join(', ');
+      
+      return {
+        text: `🏆 <b>Creating New Match</b>\n\nPlease select <b>${stepText}</b> for this match:\n\nSelected: ${selectedText || 'None'}`,
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: keyboard
+        }
+      };
+    }
+    
+    if (data === 'continue_selection') {
+      if (state.step === 'select_winners') {
+        if (state.winners.length !== 2) {
+          return {
+            text: '❌ <b>Please select exactly 2 winners!</b>',
+            parse_mode: 'HTML'
+          };
+        }
+        
+        // Move to losers selection
+        state.step = 'select_losers';
+        state.timestamp = Date.now(); // Reset timestamp
+        
+        const players = await playerService.getAllPlayers();
+        const availablePlayers = players.filter(p => 
+          !state.winners.some(w => w.username === p.username)
+        );
+        
+        const keyboard = createPlayerSelectionKeyboard(availablePlayers, []);
+        
+        return {
+          text: `🏆 <b>Creating New Match</b>\n\nWinners selected: ${state.winners.map(p => p.name || p.username).join(', ')}\n\nPlease select <b>2 losers</b> for this match:`,
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: keyboard
+          }
+        };
+      } else {
+        if (state.losers.length !== 2) {
+          return {
+            text: '❌ <b>Please select exactly 2 losers!</b>',
+            parse_mode: 'HTML'
+          };
+        }
+        
+        // Record the match
+        const winnerUsernames = state.winners.map(p => p.username);
+        const loserUsernames = state.losers.map(p => p.username);
+        
+        const result = await matchService.recordMatch(winnerUsernames, loserUsernames, 1);
+        
+        // Clear the state
+        matchCreationState.delete(chatId);
+        
+        const { match: matchRecord, eloResult } = result;
+        
+        // Format Elo changes with + or - sign
+        const formatEloChange = (change) => change >= 0 ? `+${change}` : `${change}`;
+        
+        return {
+          text: `🏆 <b>Match Recorded!</b>\n\n` +
+                `<b>Teams:</b>\n` +
+                `Winners: @${matchRecord.winners[0].username} + @${matchRecord.winners[1].username}\n` +
+                `Losers: @${matchRecord.losers[0].username} + @${matchRecord.losers[1].username}\n\n` +
+                `📊 <b>Elo Changes:</b>\n` +
+                `Winners: ${formatEloChange(eloResult.team1Changes[0])}, ${formatEloChange(eloResult.team1Changes[1])}\n` +
+                `Losers: ${formatEloChange(eloResult.team2Changes[0])}, ${formatEloChange(eloResult.team2Changes[1])}`,
+          parse_mode: 'HTML'
+        };
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('❌ Error in handlePlayerSelection:', error.message);
     throw error;
   }
 }
@@ -187,9 +404,8 @@ async function handleHelp(msg) {
                    `📝 <b>Registration:</b>\n` +
                    `• <code>/register</code> - Register yourself as a player\n\n` +
                    `🏆 <b>Match Recording:</b>\n` +
-                   `• <code>/match @p1 @p2 vs @p3 @p4</code> - Record a 2v2 match\n` +
-                   `• Example: <code>/match @john @jane vs @bob @alice</code>\n` +
-                   `• <i>The first pair (@p1 @p2) are the winners</i>\n\n` +
+                   `• <code>/match</code> - Start interactive match creation\n` +
+                   `• Select 2 winners and 2 losers using buttons\n\n` +
                    `📊 <b>Statistics:</b>\n` +
                    `• <code>/stats</code> - View your personal statistics\n` +
                    `• <code>/leaderboard</code> - View current season leaderboard\n\n` +
@@ -216,8 +432,20 @@ async function handleUnknown(msg) {
 module.exports = {
   handleRegister,
   handleMatch,
+  handlePlayerSelection,
   handleStats,
   handleLeaderboard,
   handleHelp,
-  handleUnknown
+  handleUnknown,
+  // Helper functions for testing
+  __getMatchCreationState: () => matchCreationState,
+  __setMatchCreationState: (newState) => {
+    // Clear the existing map and copy new entries
+    matchCreationState.clear();
+    if (newState instanceof Map) {
+      for (const [key, value] of newState) {
+        matchCreationState.set(key, value);
+      }
+    }
+  }
 }; 

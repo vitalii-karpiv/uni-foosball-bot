@@ -6,6 +6,7 @@ const { connectToDatabase } = require('./config/database');
 const {
   handleRegister,
   handleMatch,
+  handlePlayerSelection,
   handleStats,
   handleLeaderboard,
   handleHelp,
@@ -69,16 +70,46 @@ bot.onText(/^\/register$/, async (msg) => {
 });
 
 // Handle /match command
-bot.onText(/^\/match/, async (msg) => {
+bot.onText(/^\/match$/, async (msg) => {
   try {
     console.log('📨 Received /match command from:', msg.from.username);
-    console.log('📝 Command text:', msg.text);
     const chatId = msg.chat.id;
     const response = await handleMatch(msg);
-    await bot.sendMessage(chatId, response.text, { parse_mode: response.parse_mode });
+    await bot.sendMessage(chatId, response.text, { 
+      parse_mode: response.parse_mode,
+      reply_markup: response.reply_markup 
+    });
   } catch (error) {
     console.error('Error handling /match command:', error);
-    await bot.sendMessage(msg.chat.id, '❌ An error occurred while recording the match. Please try again.');
+    await bot.sendMessage(msg.chat.id, '❌ An error occurred while starting match creation. Please try again.');
+  }
+});
+
+// Handle callback queries (button interactions)
+bot.on('callback_query', async (callbackQuery) => {
+  try {
+    console.log('📨 Received callback query from:', callbackQuery.from.username);
+    console.log('📝 Callback data:', callbackQuery.data);
+    
+    const response = await handlePlayerSelection(callbackQuery);
+    
+    if (response) {
+      await bot.editMessageText(response.text, {
+        chat_id: callbackQuery.message.chat.id,
+        message_id: callbackQuery.message.message_id,
+        parse_mode: response.parse_mode,
+        reply_markup: response.reply_markup
+      });
+    }
+    
+    // Answer the callback query to remove loading state
+    await bot.answerCallbackQuery(callbackQuery.id);
+  } catch (error) {
+    console.error('Error handling callback query:', error);
+    await bot.answerCallbackQuery(callbackQuery.id, {
+      text: '❌ An error occurred. Please try again.',
+      show_alert: true
+    });
   }
 });
 

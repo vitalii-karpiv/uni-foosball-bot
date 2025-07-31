@@ -5,7 +5,7 @@ A Node.js Telegram bot for managing 2v2 foosball games at work with Elo rating s
 ## Features
 
 - **Player Registration**: Register players using `/register`
-- **2v2 Match Recording**: Record matches using `/match @p1 @p2 vs @p3 @p4` (first pair wins)
+- **Interactive Match Creation**: Create matches with button-based player selection
 - **Elo Rating System**: Automatic Elo rating calculations based on team average ratings
 - **Seasonal Organization**: Matches are grouped into monthly seasons
 - **MongoDB Storage**: All data stored in MongoDB Atlas
@@ -57,16 +57,32 @@ npm run dev
 ### Commands
 
 - `/register` - Register yourself as a player
-- `/match @p1 @p2 vs @p3 @p4` - Record a 2v2 match (first pair wins)
+- `/match` - Start interactive match creation (select winners and losers with buttons)
 - `/stats` - View your personal statistics
 - `/leaderboard` - View current season leaderboard
 - `/help` - Show available commands
+
+### Interactive Match Creation
+
+The new `/match` command provides a user-friendly way to create matches:
+
+1. **Start Match Creation**: Type `/match`
+2. **Select Winners**: Click buttons to select 2 winners
+3. **Select Losers**: Click buttons to select 2 losers (winners are excluded)
+4. **Confirm Match**: The match is automatically recorded with Elo changes
+
+**Features:**
+- ✅ Visual feedback for selected players
+- 🔄 Reset selection option
+- ⏰ 5-minute session timeout for security
+- 🚫 Prevents duplicate player selection
+- ➡️ Continue button when 2 players selected
 
 ### Examples
 
 ```
 /register
-/match @john @jane vs @bob @alice
+/match  # Interactive match creation
 /stats
 /leaderboard
 ```
@@ -117,9 +133,21 @@ function updateTeamElo(teamARatings, teamBRatings, teamAWins, k = 32) {
 ## Workflow
 
 1. **Register Players**: All players must register using `/register`
-2. **Record Matches**: Record 2v2 matches using `/match` (first pair always wins)
+2. **Create Matches**: Use interactive `/match` command to select players
 3. **Track Stats**: View personal and season statistics
 4. **View Leaderboards**: Check current season standings
+
+## Testing
+
+Run the test suite:
+```bash
+npm test
+```
+
+The test suite includes:
+- Unit tests for all handlers and services
+- Integration tests for the complete match creation flow
+- Coverage reporting for all modules
 
 ## License
 

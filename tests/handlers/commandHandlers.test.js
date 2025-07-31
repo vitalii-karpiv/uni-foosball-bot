@@ -31,33 +31,277 @@ describe('commandHandlers', () => {
   });
 
   describe('handleMatch', () => {
-    it('should return error for invalid match format', async () => {
-      const msg = { text: '/match @a @b @c @d' };
+    it('should return error if match creation already in progress', async () => {
+      // Mock that there's already a match creation in progress
+      const mockMap = new Map();
+      mockMap.set(123, { userId: 456, step: 'select_winners' });
+      
+      // Mock the matchCreationState Map
+      const originalMap = commandHandlers.__getMatchCreationState();
+      commandHandlers.__setMatchCreationState(mockMap);
+      
+      const msg = { chat: { id: 123 }, from: { id: 789 } };
       const result = await commandHandlers.handleMatch(msg);
-      expect(result.text).toMatch(/Invalid match format/);
+      
+      expect(result.text).toMatch(/Match creation already in progress/);
+      
+      // Restore original map
+      commandHandlers.__setMatchCreationState(originalMap);
     });
-    it('should record match and return summary', async () => {
-      matchService.recordMatch.mockResolvedValue({
-        match: { winners: [{ username: 'a' }, { username: 'b' }], losers: [{ username: 'c' }, { username: 'd' }] },
-        eloResult: { team1Changes: [10, 12], team2Changes: [-10, -12] },
-        winners: [{ username: 'a' }, { username: 'b' }],
-        losers: [{ username: 'c' }, { username: 'd' }]
+
+    it('should return error if not enough players registered', async () => {
+      playerService.getAllPlayers.mockResolvedValue([
+        { username: 'player1', name: 'Player 1' },
+        { username: 'player2', name: 'Player 2' },
+        { username: 'player3', name: 'Player 3' }
+      ]);
+      
+      const msg = { chat: { id: 123 }, from: { id: 456 } };
+      const result = await commandHandlers.handleMatch(msg);
+      
+      expect(result.text).toMatch(/Not enough players registered/);
+    });
+
+    it('should start match creation with player selection keyboard', async () => {
+      const mockPlayers = [
+        { username: 'player1', name: 'Player 1' },
+        { username: 'player2', name: 'Player 2' },
+        { username: 'player3', name: 'Player 3' },
+        { username: 'player4', name: 'Player 4' }
+      ];
+      
+      playerService.getAllPlayers.mockResolvedValue(mockPlayers);
+      
+      const msg = { chat: { id: 123 }, from: { id: 456 } };
+      const result = await commandHandlers.handleMatch(msg);
+      
+      expect(result.text).toMatch(/Creating New Match/);
+      expect(result.text).toMatch(/Please select <b>2 winners<\/b>/);
+      expect(result.reply_markup).toBeDefined();
+      expect(result.reply_markup.inline_keyboard).toBeDefined();
+      
+      // Check that keyboard has player buttons
+      const keyboard = result.reply_markup.inline_keyboard;
+      expect(keyboard.length).toBeGreaterThan(0);
+      expect(keyboard[0][0].text).toBe('Player 1');
+      expect(keyboard[0][0].callback_data).toBe('player_player1');
+    });
+  });
+
+  describe('handlePlayerSelection', () => {
+    beforeEach(() => {
+      // Clear any existing match creation state
+      const mockMap = new Map();
+      commandHandlers.__setMatchCreationState(mockMap);
+    });
+
+    it('should return error for invalid action', async () => {
+      const callbackQuery = {
+        message: { chat: { id: 123 } },
+        from: { id: 456 },
+        data: 'player_player1'
+      };
+      
+      const result = await commandHandlers.handlePlayerSelection(callbackQuery);
+      
+      expect(result.text).toMatch(/Invalid action/);
+    });
+
+    it('should return error for expired session', async () => {
+      const mockMap = new Map();
+      mockMap.set(123, {
+        userId: 456,
+        step: 'select_winners',
+        winners: [],
+        losers: [],
+        timestamp: Date.now() - 6 * 60 * 1000 // 6 minutes ago
       });
-      const msg = { text: '/match @a @b vs @c @d' };
-      const result = await commandHandlers.handleMatch(msg);
+      commandHandlers.__setMatchCreationState(mockMap);
+      
+      const callbackQuery = {
+        message: { chat: { id: 123 } },
+        from: { id: 456 },
+        data: 'player_player1'
+      };
+      
+      const result = await commandHandlers.handlePlayerSelection(callbackQuery);
+      
+      expect(result.text).toMatch(/Match creation session expired/);
+    });
+
+    it('should handle reset selection', async () => {
+      const mockMap = new Map();
+      mockMap.set(123, {
+        userId: 456,
+        step: 'select_winners',
+        winners: [{ username: 'player1', name: 'Player 1' }],
+        losers: [],
+        timestamp: Date.now()
+      });
+      commandHandlers.__setMatchCreationState(mockMap);
+      
+      const mockPlayers = [
+        { username: 'player1', name: 'Player 1' },
+        { username: 'player2', name: 'Player 2' },
+        { username: 'player3', name: 'Player 3' },
+        { username: 'player4', name: 'Player 4' }
+      ];
+      playerService.getAllPlayers.mockResolvedValue(mockPlayers);
+      
+      const callbackQuery = {
+        message: { chat: { id: 123 } },
+        from: { id: 456 },
+        data: 'reset_selection'
+      };
+      
+      const result = await commandHandlers.handlePlayerSelection(callbackQuery);
+      
+      expect(result.text).toMatch(/Please select <b>2 winners<\/b>/);
+      expect(result.reply_markup.inline_keyboard).toBeDefined();
+    });
+
+    it('should handle player selection for winners', async () => {
+      const mockMap = new Map();
+      mockMap.set(123, {
+        userId: 456,
+        step: 'select_winners',
+        winners: [],
+        losers: [],
+        timestamp: Date.now()
+      });
+      commandHandlers.__setMatchCreationState(mockMap);
+      
+      const mockPlayers = [
+        { username: 'player1', name: 'Player 1' },
+        { username: 'player2', name: 'Player 2' },
+        { username: 'player3', name: 'Player 3' },
+        { username: 'player4', name: 'Player 4' }
+      ];
+      playerService.getAllPlayers.mockResolvedValue(mockPlayers);
+      playerService.getPlayerByUsername.mockResolvedValue({ username: 'player1', name: 'Player 1' });
+      
+      const callbackQuery = {
+        message: { chat: { id: 123 } },
+        from: { id: 456 },
+        data: 'player_player1'
+      };
+      
+      const result = await commandHandlers.handlePlayerSelection(callbackQuery);
+      
+      expect(result.text).toMatch(/Selected: Player 1/);
+      expect(result.reply_markup.inline_keyboard).toBeDefined();
+    });
+
+    it('should prevent selecting more than 2 winners', async () => {
+      const mockMap = new Map();
+      mockMap.set(123, {
+        userId: 456,
+        step: 'select_winners',
+        winners: [
+          { username: 'player1', name: 'Player 1' },
+          { username: 'player2', name: 'Player 2' }
+        ],
+        losers: [],
+        timestamp: Date.now()
+      });
+      commandHandlers.__setMatchCreationState(mockMap);
+      
+      const mockPlayers = [
+        { username: 'player1', name: 'Player 1' },
+        { username: 'player2', name: 'Player 2' },
+        { username: 'player3', name: 'Player 3' },
+        { username: 'player4', name: 'Player 4' }
+      ];
+      playerService.getAllPlayers.mockResolvedValue(mockPlayers);
+      playerService.getPlayerByUsername.mockResolvedValue({ username: 'player3', name: 'Player 3' });
+      
+      const callbackQuery = {
+        message: { chat: { id: 123 } },
+        from: { id: 456 },
+        data: 'player_player3'
+      };
+      
+      const result = await commandHandlers.handlePlayerSelection(callbackQuery);
+      
+      expect(result.text).toMatch(/Maximum 2 winners selected/);
+    });
+
+    it('should continue to losers selection when 2 winners selected', async () => {
+      const mockMap = new Map();
+      mockMap.set(123, {
+        userId: 456,
+        step: 'select_winners',
+        winners: [
+          { username: 'player1', name: 'Player 1' },
+          { username: 'player2', name: 'Player 2' }
+        ],
+        losers: [],
+        timestamp: Date.now()
+      });
+      commandHandlers.__setMatchCreationState(mockMap);
+      
+      const mockPlayers = [
+        { username: 'player1', name: 'Player 1' },
+        { username: 'player2', name: 'Player 2' },
+        { username: 'player3', name: 'Player 3' },
+        { username: 'player4', name: 'Player 4' }
+      ];
+      playerService.getAllPlayers.mockResolvedValue(mockPlayers);
+      
+      const callbackQuery = {
+        message: { chat: { id: 123 } },
+        from: { id: 456 },
+        data: 'continue_selection'
+      };
+      
+      const result = await commandHandlers.handlePlayerSelection(callbackQuery);
+      
+      expect(result.text).toMatch(/Winners selected: Player 1, Player 2/);
+      expect(result.text).toMatch(/Please select <b>2 losers<\/b>/);
+    });
+
+    it('should record match when losers selection is complete', async () => {
+      const mockMap = new Map();
+      mockMap.set(123, {
+        userId: 456,
+        step: 'select_losers',
+        winners: [
+          { username: 'player1', name: 'Player 1' },
+          { username: 'player2', name: 'Player 2' }
+        ],
+        losers: [
+          { username: 'player3', name: 'Player 3' },
+          { username: 'player4', name: 'Player 4' }
+        ],
+        timestamp: Date.now()
+      });
+      commandHandlers.__setMatchCreationState(mockMap);
+      
+      matchService.recordMatch.mockResolvedValue({
+        match: {
+          winners: [{ username: 'player1' }, { username: 'player2' }],
+          losers: [{ username: 'player3' }, { username: 'player4' }]
+        },
+        eloResult: {
+          team1Changes: [10, 12],
+          team2Changes: [-10, -12]
+        }
+      });
+      
+      const callbackQuery = {
+        message: { chat: { id: 123 } },
+        from: { id: 456 },
+        data: 'continue_selection'
+      };
+      
+      const result = await commandHandlers.handlePlayerSelection(callbackQuery);
+      
       expect(result.text).toMatch(/Match Recorded/);
-    });
-    it('should return player not found error', async () => {
-      matchService.recordMatch.mockRejectedValue(new Error('Player @c not found. Please register first.'));
-      const msg = { text: '/match @a @b vs @c @d' };
-      const result = await commandHandlers.handleMatch(msg);
-      expect(result.text).toMatch(/Player not found/);
-    });
-    it('should return invalid teams error', async () => {
-      matchService.recordMatch.mockRejectedValue(new Error('All players must be different'));
-      const msg = { text: '/match @a @b vs @a @b' };
-      const result = await commandHandlers.handleMatch(msg);
-      expect(result.text).toMatch(/Invalid teams/);
+      expect(matchService.recordMatch).toHaveBeenCalledWith(
+        ['player1', 'player2'],
+        ['player3', 'player4'],
+        1
+      );
     });
   });
 
@@ -108,6 +352,7 @@ describe('commandHandlers', () => {
       const msg = {};
       const result = await commandHandlers.handleHelp(msg);
       expect(result.text).toMatch(/Foosbot Commands/);
+      expect(result.text).toMatch(/interactive match creation/);
     });
   });
 
