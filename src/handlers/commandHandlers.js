@@ -253,14 +253,76 @@ async function handlePlayerSelection(callbackQuery, bot = null) {
       // Update keyboard
       const players = await playerService.getAllPlayers();
       const currentSelectionForKeyboard = state.step === 'select_winners' ? state.winners : state.losers;
-      const keyboard = createPlayerSelectionKeyboard(players, currentSelectionForKeyboard);
+      
+      // Filter available players based on current step
+      let availablePlayers = players;
+      if (state.step === 'select_losers') {
+        // For losers selection, exclude winners and already selected losers
+        availablePlayers = players.filter(p => 
+          !state.winners.some(w => w.username === p.username) &&
+          !state.losers.some(l => l.username === p.username)
+        );
+      }
+      
+      const keyboard = createPlayerSelectionKeyboard(availablePlayers, currentSelectionForKeyboard);
       
       // Add continue button if 2 players selected
       if (currentSelectionForKeyboard.length === 2) {
-        keyboard.push([{
-          text: '➡️ Continue',
-          callback_data: 'continue_selection'
-        }]);
+        // If we're selecting losers and have 2 losers, automatically create the match
+        if (state.step === 'select_losers') {
+          // Record the match
+          const winnerUsernames = state.winners.map(p => p.username);
+          const loserUsernames = state.losers.map(p => p.username);
+          
+          const result = await matchService.recordMatch(winnerUsernames, loserUsernames, 1);
+          
+          // Clear the state
+          matchCreationState.delete(chatId);
+          
+          const { match: matchRecord, eloResult } = result;
+          
+          // Format Elo changes with + or - sign
+          const formatEloChange = (change) => change >= 0 ? `+${change}` : `${change}`;
+          
+          const matchNotification = `🏆 <b>New Match Recorded!</b>\n\n` +
+                  `<b>Teams:</b>\n` +
+                  `Winners: @${matchRecord.winners[0].username} + @${matchRecord.winners[1].username}\n` +
+                  `Losers: @${matchRecord.losers[0].username} + @${matchRecord.losers[1].username}\n\n` +
+                  `📊 <b>Elo Changes:</b>\n` +
+                  `Winners: ${formatEloChange(eloResult.team1Changes[0])}, ${formatEloChange(eloResult.team1Changes[1])}\n` +
+                  `Losers: ${formatEloChange(eloResult.team2Changes[0])}, ${formatEloChange(eloResult.team2Changes[1])}`;
+          
+          // Send notification to all users with chatId
+          if (bot) {
+            const players = await playerService.getAllPlayers();
+            const usersWithChatId = players.filter(p => p.chatId);
+            const matchParticipants = [...winnerUsernames, ...loserUsernames];
+            
+            for (const player of usersWithChatId) {
+              // Skip sending notification to players who participated in this match
+              if (matchParticipants.includes(player.username)) {
+                continue;
+              }
+              
+              try {
+                await bot.sendMessage(player.chatId, matchNotification, { parse_mode: 'HTML' });
+              } catch (error) {
+                console.error(`Failed to send match notification to ${player.username}:`, error);
+              }
+            }
+          }
+          
+          return {
+            text: matchNotification,
+            parse_mode: 'HTML'
+          };
+        } else {
+          // For winners selection, show continue button
+          keyboard.push([{
+            text: '➡️ Continue',
+            callback_data: 'continue_selection'
+          }]);
+        }
       }
       
       const stepText = state.step === 'select_winners' ? '2 winners' : '2 losers';

@@ -101,21 +101,11 @@ describe('Match Creation Integration', () => {
     };
     
     const loser2Result = await commandHandlers.handlePlayerSelection(selectLoser2Query);
-    expect(loser2Result.text).toMatch(/Selected: Player 3, Player 4/);
-
-    // Step 7: Complete match recording
-    const finalContinueQuery = {
-      message: { chat: { id: 123 } },
-      from: { id: 456 },
-      data: 'continue_selection'
-    };
-    
-    const finalResult = await commandHandlers.handlePlayerSelection(finalContinueQuery);
-    expect(finalResult.text).toMatch(/Match Recorded/);
-    expect(finalResult.text).toMatch(/Winners: @player1 \+ @player2/);
-    expect(finalResult.text).toMatch(/Losers: @player3 \+ @player4/);
-    expect(finalResult.text).toMatch(/Winners: \+10, \+12/);
-    expect(finalResult.text).toMatch(/Losers: -10, -12/);
+    expect(loser2Result.text).toMatch(/Match Recorded/);
+    expect(loser2Result.text).toMatch(/Winners: @player1 \+ @player2/);
+    expect(loser2Result.text).toMatch(/Losers: @player3 \+ @player4/);
+    expect(loser2Result.text).toMatch(/Winners: \+10, \+12/);
+    expect(loser2Result.text).toMatch(/Losers: -10, -12/);
 
     // Verify match was recorded with correct parameters
     expect(matchService.recordMatch).toHaveBeenCalledWith(
