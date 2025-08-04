@@ -12,6 +12,10 @@ describe('commandHandlers', () => {
     playerService.updatePlayerChatId = jest.fn().mockImplementation((username, chatId) => 
       Promise.resolve({ username, chatId })
     );
+    // Mock getAllTimeLeaderboard
+    playerService.getAllTimeLeaderboard = jest.fn();
+    // Mock updatePlayerAlias
+    playerService.updatePlayerAlias = jest.fn();
   });
 
   describe('handleRegister', () => {
@@ -333,21 +337,73 @@ describe('commandHandlers', () => {
 
   describe('handleLeaderboard', () => {
     it('should return empty leaderboard message', async () => {
-      playerService.getSeasonLeaderboard.mockResolvedValue([]);
+      playerService.getAllTimeLeaderboard.mockResolvedValue([]);
       const msg = {};
       const result = await commandHandlers.handleLeaderboard(msg);
       expect(result.text).toMatch(/No players registered yet/);
     });
     it('should return leaderboard with players', async () => {
-      playerService.getSeasonLeaderboard.mockResolvedValue([
-        { username: 'a', name: 'A', elo: 1200, seasonWins: 2, seasonMatches: 3, seasonWinRate: 66.7 },
-        { username: 'b', name: 'B', elo: 1100, seasonWins: 1, seasonMatches: 3, seasonWinRate: 33.3 }
+      playerService.getAllTimeLeaderboard.mockResolvedValue([
+        { username: 'a', name: 'A', elo: 1200, totalMatches: 10, totalWins: 7, winRate: 70.0 },
+        { username: 'b', name: 'B', elo: 1100, totalMatches: 8, totalWins: 4, winRate: 50.0 }
       ]);
       const msg = {};
       const result = await commandHandlers.handleLeaderboard(msg);
-      expect(result.text).toMatch(/Leaderboard/);
-      expect(result.text).toMatch(/@a/);
-      expect(result.text).toMatch(/@b/);
+      expect(result.text).toMatch(/All-Time Leaderboard/);
+      expect(result.text).toMatch(/# \| Player/);
+      expect(result.text).toMatch(/a/);
+      expect(result.text).toMatch(/b/);
+      expect(result.text).toMatch(/1200/);
+      expect(result.text).toMatch(/1100/);
+      expect(result.text).toMatch(/70%/);
+      expect(result.text).toMatch(/50%/);
+    });
+    it('should display alias instead of username when available', async () => {
+      playerService.getAllTimeLeaderboard.mockResolvedValue([
+        { username: 'a', alias: 'ProPlayer', name: 'A', elo: 1200, totalMatches: 10, totalWins: 7, winRate: 70.0 },
+        { username: 'b', name: 'B', elo: 1100, totalMatches: 8, totalWins: 4, winRate: 50.0 }
+      ]);
+      const msg = {};
+      const result = await commandHandlers.handleLeaderboard(msg);
+      expect(result.text).toMatch(/ProPlayer/);
+      expect(result.text).toMatch(/b/);
+    });
+  });
+
+  describe('handleAlias', () => {
+    it('should return error if no username', async () => {
+      const msg = { from: { username: undefined }, text: '/alias TestAlias' };
+      const result = await commandHandlers.handleAlias(msg);
+      expect(result.text).toMatch(/You need to have a Telegram username/);
+    });
+    it('should return error if no alias provided', async () => {
+      const msg = { from: { username: 'user' }, text: '/alias' };
+      const result = await commandHandlers.handleAlias(msg);
+      expect(result.text).toMatch(/Usage:/);
+    });
+    it('should return error if alias is empty', async () => {
+      const msg = { from: { username: 'user' }, text: '/alias   ' };
+      const result = await commandHandlers.handleAlias(msg);
+      expect(result.text).toMatch(/Alias cannot be empty/);
+    });
+    it('should return error if alias is too long', async () => {
+      const msg = { from: { username: 'user' }, text: '/alias ThisAliasIsWayTooLongForTheLimit' };
+      const result = await commandHandlers.handleAlias(msg);
+      expect(result.text).toMatch(/Alias is too long/);
+    });
+    it('should update alias successfully', async () => {
+      playerService.updatePlayerAlias.mockResolvedValue({ username: 'user', alias: 'TestAlias' });
+      const msg = { from: { username: 'user' }, text: '/alias TestAlias' };
+      const result = await commandHandlers.handleAlias(msg);
+      expect(result.text).toMatch(/Alias updated!/);
+      expect(result.text).toMatch(/TestAlias/);
+      expect(playerService.updatePlayerAlias).toHaveBeenCalledWith('user', 'TestAlias');
+    });
+    it('should return player not found error', async () => {
+      playerService.updatePlayerAlias.mockResolvedValue(null);
+      const msg = { from: { username: 'user' }, text: '/alias TestAlias' };
+      const result = await commandHandlers.handleAlias(msg);
+      expect(result.text).toMatch(/Player not found/);
     });
   });
 

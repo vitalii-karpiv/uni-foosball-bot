@@ -8,7 +8,7 @@ const Match = require('../models/Match');
  * @param {string} chatId - Telegram chat ID
  * @returns {Promise<Object>} Created player object
  */
-async function registerPlayer(username, name = null, chatId = null) {
+async function registerPlayer(username, name = null, chatId = null, alias = null) {
   try {
     // Remove @ if present
     const cleanUsername = username.replace('@', '');
@@ -23,6 +23,7 @@ async function registerPlayer(username, name = null, chatId = null) {
     const player = new Player({
       username: cleanUsername,
       name: name || cleanUsername,
+      alias: alias,
       elo: 1000,
       chatId: chatId
     });
@@ -95,6 +96,21 @@ async function updatePlayerChatId(username, chatId) {
 }
 
 /**
+ * Update player's alias by username
+ * @param {string} username - Telegram username
+ * @param {string} alias - New alias
+ * @returns {Promise<Object>} Updated player object
+ */
+async function updatePlayerAlias(username, alias) {
+  const cleanUsername = username.replace('@', '');
+  return await Player.findOneAndUpdate(
+    { username: cleanUsername },
+    { alias },
+    { new: true }
+  );
+}
+
+/**
  * Get all players sorted by Elo rating
  * @returns {Promise<Array>} Array of players
  */
@@ -145,6 +161,44 @@ async function getSeasonLeaderboard(season) {
   }
 }
 
+/**
+ * Get players for all-time leaderboard with comprehensive stats
+ * @returns {Promise<Array>} Array of players with all-time stats
+ */
+async function getAllTimeLeaderboard() {
+  try {
+    // Get all players with their current Elo
+    const players = await Player.find().sort({ elo: -1 });
+    
+    // Get all matches for each player
+    const playersWithStats = await Promise.all(
+      players.map(async (player) => {
+        const allMatches = await Match.find({
+          players: player._id
+        }).populate('players winners losers');
+        
+        const wins = allMatches.filter(match => 
+          match.winners.some(p => p._id.toString() === player._id.toString())
+        ).length;
+        
+        const totalMatches = allMatches.length;
+        const winRate = totalMatches > 0 ? (wins / totalMatches * 100).toFixed(1) : 0;
+        
+        return {
+          ...player.toObject(),
+          totalWins: wins,
+          totalMatches: totalMatches,
+          winRate: winRate
+        };
+      })
+    );
+    
+    return playersWithStats.sort((a, b) => b.elo - a.elo);
+  } catch (error) {
+    throw error;
+  }
+}
+
 module.exports = {
   registerPlayer,
   getPlayerByUsername,
@@ -152,5 +206,7 @@ module.exports = {
   updatePlayerElo,
   getAllPlayers,
   getSeasonLeaderboard,
-  updatePlayerChatId
+  getAllTimeLeaderboard,
+  updatePlayerChatId,
+  updatePlayerAlias
 }; 

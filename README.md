@@ -57,9 +57,10 @@ npm run dev
 ### Commands
 
 - `/register` - Register yourself as a player
+- `/alias <name>` - Set your display name for the leaderboard
 - `/match` - Start interactive match creation (select winners and losers with buttons)
 - `/stats` - View your personal statistics
-- `/leaderboard` - View current season leaderboard
+- `/leaderboard` - View all-time leaderboard table with ELO, matches played, and win rate
 - `/help` - Show available commands
 
 ### Interactive Match Creation
@@ -91,6 +92,7 @@ The new `/match` command provides a user-friendly way to create matches:
 
 ### Player
 - `username`: Telegram username (unique)
+- `alias`: Optional display name for leaderboard (falls back to username if not set)
 - `name`: Optional full name
 - `elo`: Current Elo rating (default: 1000)
 - `chatId`: Telegram chat ID (used for messaging)
@@ -145,7 +147,7 @@ function updateTeamElo(teamARatings, teamBRatings, teamAWins, k = 32) {
 1. **Register Players**: All players must register using `/register`
 2. **Create Matches**: Use interactive `/match` command to select players
 3. **Track Stats**: View personal and season statistics
-4. **View Leaderboards**: Check current season standings
+4. **View Leaderboards**: Check all-time standings with comprehensive statistics
 
 ## Testing
 

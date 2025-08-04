@@ -9,6 +9,7 @@ const {
   handlePlayerSelection,
   handleStats,
   handleLeaderboard,
+  handleAlias,
   handleHelp,
   handleUnknown,
   handlePlay
@@ -236,6 +237,19 @@ bot.onText(/^\/leaderboard$/, async (msg) => {
   } catch (error) {
     console.error('Error handling /leaderboard command:', error);
     await bot.sendMessage(msg.chat.id, '❌ An error occurred while fetching the leaderboard. Please try again.');
+  }
+});
+
+// Handle /alias command
+bot.onText(/^\/alias (.+)$/, async (msg, match) => {
+  try {
+    console.log('📨 Received /alias command from:', msg.from.username);
+    const chatId = msg.chat.id;
+    const response = await handleAlias(msg);
+    await bot.sendMessage(chatId, response.text, { parse_mode: response.parse_mode });
+  } catch (error) {
+    console.error('Error handling /alias command:', error);
+    await bot.sendMessage(msg.chat.id, '❌ An error occurred while setting alias. Please try again.');
   }
 });
 

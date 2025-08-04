@@ -7,6 +7,10 @@ const playerSchema = new mongoose.Schema({
     unique: true,
     trim: true
   },
+  alias: {
+    type: String,
+    trim: true
+  },
   name: {
     type: String,
     trim: true

@@ -534,25 +534,30 @@ async function handleStats(msg) {
  */
 async function handleLeaderboard(msg) {
   try {
-    const currentSeason = getCurrentSeason();
-    const leaderboard = await playerService.getSeasonLeaderboard(currentSeason);
+    const leaderboard = await playerService.getAllTimeLeaderboard();
     
     if (leaderboard.length === 0) {
       return {
-        text: `📊 <b>Season ${currentSeason} Leaderboard</b>\n\nNo players registered yet. Use /register to join!`,
+        text: `📊 <b>All-Time Leaderboard</b>\n\nNo players registered yet. Use /register to join!`,
         parse_mode: 'HTML'
       };
     }
     
-    let text = `📊 <b>Season ${currentSeason} Leaderboard</b>\n\n`;
+    let text = `📊 <b>All-Time Leaderboard</b>\n\n`;
+    
+    // Create table header
+    text += `<code># | Player     | ELO  | WR\n`;
+    text += `--|------------|------|----\n`;
     
     leaderboard.forEach((player, index) => {
-      const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
-      const name = player.name || player.username;
+      const rank = index + 1;
+      const displayName = player.alias || player.username;
       
-      text += `${medal} <b>@${player.username}</b> (${name})\n`;
-      text += `   Elo: <b>${player.elo}</b> | Season: ${player.seasonWins}W/${player.seasonMatches}M (${player.seasonWinRate}%)\n\n`;
+      // Format the table row with compact spacing
+      text += `${rank.toString()} | ${displayName.padEnd(10)} | ${player.elo.toString().padStart(4)} | ${player.winRate}%\n`;
     });
+    
+    text += `</code>`;
     
     return {
       text: text.trim(),
@@ -564,18 +569,80 @@ async function handleLeaderboard(msg) {
 }
 
 /**
+ * Handle /alias command
+ */
+async function handleAlias(msg) {
+  try {
+    const username = msg.from.username;
+    
+    if (!username) {
+      return {
+        text: '❌ You need to have a Telegram username to set an alias. Please set a username in your Telegram settings and try again.',
+        parse_mode: 'HTML'
+      };
+    }
+    
+    // Extract alias from message text (format: /alias <new_alias>)
+    const messageText = msg.text || '';
+    const parts = messageText.split(' ');
+    
+    if (parts.length < 2) {
+      return {
+        text: '❌ <b>Usage:</b> <code>/alias &lt;your_alias&gt;</code>\n\nExample: <code>/alias ProPlayer</code>',
+        parse_mode: 'HTML'
+      };
+    }
+    
+    const newAlias = parts[1].trim();
+    
+    if (newAlias.length === 0) {
+      return {
+        text: '❌ Alias cannot be empty. Please provide a valid alias.',
+        parse_mode: 'HTML'
+      };
+    }
+    
+    if (newAlias.length > 15) {
+      return {
+        text: '❌ Alias is too long. Please use 15 characters or less.',
+        parse_mode: 'HTML'
+      };
+    }
+    
+    // Update the player's alias
+    const updatedPlayer = await playerService.updatePlayerAlias(username, newAlias);
+    
+    if (!updatedPlayer) {
+      return {
+        text: '❌ Player not found! You need to register first using /register.',
+        parse_mode: 'HTML'
+      };
+    }
+    
+    return {
+      text: `✅ <b>Alias updated!</b>\n\nYour alias is now: <b>${newAlias}</b>\n\nThis will be displayed on the leaderboard instead of your username.`,
+      parse_mode: 'HTML'
+    };
+  } catch (error) {
+    console.error('❌ Error in handleAlias:', error.message);
+    throw error;
+  }
+}
+
+/**
  * Handle /help command
  */
 async function handleHelp(msg) {
   const helpText = `🤖 <b>Foosbot Commands</b>\n\n` +
                    `📝 <b>Registration:</b>\n` +
-                   `• <code>/register</code> - Register yourself as a player\n\n` +
+                   `• <code>/register</code> - Register yourself as a player\n` +
+                   `• <code>/alias &lt;name&gt;</code> - Set your display name for the leaderboard\n\n` +
                    `🏆 <b>Match Recording:</b>\n` +
                    `• <code>/match</code> - Start interactive match creation\n` +
                    `• Select 2 winners and 2 losers using buttons\n\n` +
                    `📊 <b>Statistics:</b>\n` +
                    `• <code>/stats</code> - View your personal statistics\n` +
-                   `• <code>/leaderboard</code> - View current season leaderboard\n\n` +
+                   `• <code>/leaderboard</code> - View all-time leaderboard table with ELO, matches, and win rate\n\n` +
                    `🎲 <b>Play:</b>\n` +
                    `• <code>/play</code> - Invite players to join a match\n\n` +
                    `❓ <b>Help:</b>\n` +
@@ -604,6 +671,7 @@ module.exports = {
   handlePlayerSelection,
   handleStats,
   handleLeaderboard,
+  handleAlias,
   handleHelp,
   handleUnknown,
   handlePlay,

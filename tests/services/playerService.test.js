@@ -62,6 +62,19 @@ describe('playerService', () => {
     });
   });
 
+  describe('updatePlayerAlias', () => {
+    it('should update player alias', async () => {
+      Player.findOneAndUpdate.mockResolvedValue({ username: 'user', alias: 'ProPlayer' });
+      const result = await playerService.updatePlayerAlias('user', 'ProPlayer');
+      expect(Player.findOneAndUpdate).toHaveBeenCalledWith(
+        { username: 'user' },
+        { alias: 'ProPlayer' },
+        { new: true }
+      );
+      expect(result).toEqual({ username: 'user', alias: 'ProPlayer' });
+    });
+  });
+
   describe('getAllPlayers', () => {
     it('should return all players sorted by elo', async () => {
       Player.find.mockReturnValue({ sort: () => Promise.resolve([{ elo: 1200 }, { elo: 1000 }]) });
@@ -89,6 +102,38 @@ describe('playerService', () => {
       expect(result[0]).toHaveProperty('seasonWins');
       expect(result[0]).toHaveProperty('seasonMatches');
       expect(result[0]).toHaveProperty('seasonWinRate');
+    });
+  });
+
+  describe('getAllTimeLeaderboard', () => {
+    it('should return leaderboard with all-time stats', async () => {
+      const players = [
+        { _id: '1', elo: 1200, toObject: function() { return this; } },
+        { _id: '2', elo: 1000, toObject: function() { return this; } }
+      ];
+      Player.find.mockReturnValue({ sort: () => Promise.resolve(players) });
+      Match.find.mockImplementation(({ players: playerId }) => {
+        if (playerId === '1') {
+          return { populate: () => Promise.resolve([
+            { winners: [{ _id: '1' }] },
+            { winners: [{ _id: '1' }] },
+            { winners: [{ _id: '2' }] }
+          ]) };
+        } else {
+          return { populate: () => Promise.resolve([
+            { winners: [{ _id: '2' }] },
+            { winners: [{ _id: '1' }] }
+          ]) };
+        }
+      });
+      const result = await playerService.getAllTimeLeaderboard();
+      expect(result.length).toBe(2);
+      expect(result[0]).toHaveProperty('totalWins');
+      expect(result[0]).toHaveProperty('totalMatches');
+      expect(result[0]).toHaveProperty('winRate');
+      expect(result[0].totalMatches).toBe(3);
+      expect(result[0].totalWins).toBe(2);
+      expect(result[0].winRate).toBe('66.7');
     });
   });
 }); 
