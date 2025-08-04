@@ -10,7 +10,8 @@ const {
   handleStats,
   handleLeaderboard,
   handleHelp,
-  handleUnknown
+  handleUnknown,
+  handlePlay
 } = require('./handlers/commandHandlers');
 const playerService = require('./services/playerService');
 
@@ -86,9 +87,74 @@ bot.onText(/^\/match$/, async (msg) => {
   }
 });
 
-// Handle callback queries (button interactions)
+// Handle /play command
+bot.onText(/^\/play$/, async (msg) => {
+  try {
+    console.log('📨 Received /play command from:', msg.from.username);
+    const chatId = msg.chat.id;
+    const response = await handlePlay(bot, msg);
+    await bot.sendMessage(chatId, response.text, { 
+      parse_mode: response.parse_mode,
+      reply_markup: response.reply_markup 
+    });
+  } catch (error) {
+    console.error('Error handling /play command:', error);
+    await bot.sendMessage(msg.chat.id, '❌ An error occurred while starting play session. Please try again.');
+  }
+});
+
+// Enhance callback_query handler for play_yes_ and play_no_
 bot.on('callback_query', async (callbackQuery) => {
   try {
+    const { data, from, message } = callbackQuery;
+    if (data === 'cancel_play_session') {
+      const { playSession } = require('./handlers/commandHandlers');
+      playSession.active = false;
+      playSession.invited = [];
+      playSession.accepted = [];
+      playSession.declined = [];
+      playSession.messageIds = {};
+      await bot.editMessageText('✅ Play session cancelled.', {
+        chat_id: message.chat.id,
+        message_id: message.message_id
+      });
+      await bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+    if (data.startsWith('play_yes_') || data.startsWith('play_no_')) {
+      const username = data.replace('play_yes_', '').replace('play_no_', '');
+      const { playSession } = require('./handlers/commandHandlers');
+      if (!playSession.active) return;
+      if (data.startsWith('play_yes_')) {
+        if (!playSession.accepted.includes(username)) playSession.accepted.push(username);
+        playSession.declined = playSession.declined.filter(u => u !== username);
+        await bot.editMessageText('✅ You have agreed to join the match!', {
+          chat_id: message.chat.id,
+          message_id: message.message_id
+        });
+      } else {
+        if (!playSession.declined.includes(username)) playSession.declined.push(username);
+        playSession.accepted = playSession.accepted.filter(u => u !== username);
+        await bot.editMessageText('❌ You have declined to join the match.', {
+          chat_id: message.chat.id,
+          message_id: message.message_id
+        });
+      }
+      // If 4 accepted, notify all
+      if (playSession.accepted.length === 4) {
+        const acceptedUsernames = playSession.accepted.map(u => `@${u}`).join(', ');
+        for (const uname of playSession.accepted) {
+          const playerService = require('./services/playerService');
+          const player = await playerService.getPlayerByUsername(uname);
+          if (player && player.chatId) {
+            await bot.sendMessage(player.chatId, `🏆 4 players have agreed! The match is scheduled.\n\nPlayers: ${acceptedUsernames}`);
+          }
+        }
+        playSession.active = false;
+      }
+      await bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
     console.log('📨 Received callback query from:', callbackQuery.from.username);
     console.log('📝 Callback data:', callbackQuery.data);
     

@@ -133,6 +133,13 @@ function updateTeamElo(teamARatings, teamBRatings, teamAWins, k = 32) {
 }
 ```
 
+## Play Feature
+
+- Use the <code>/play</code> command to invite all users with a chatId to join a foosball match.
+- Each invited user receives a message with Yes/No buttons to indicate if they want to play.
+- When 4 users agree, all of them receive a message that the match is scheduled.
+- Only one play session can be active at a time.
+
 ## Workflow
 
 1. **Register Players**: All players must register using `/register`

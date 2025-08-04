@@ -5,6 +5,15 @@ const { getCurrentSeason } = require('../utils/elo');
 // TODO: Store match creation state (in production, use Redis or database)
 const matchCreationState = new Map();
 
+// In-memory play session state
+const playSession = {
+  invited: [], // usernames
+  accepted: [], // usernames
+  declined: [], // usernames
+  active: false,
+  messageIds: {}, // username: messageId
+};
+
 /**
  * Handle /register command
  */
@@ -338,6 +347,59 @@ async function handlePlayerSelection(callbackQuery) {
 }
 
 /**
+ * Handle /play command
+ * @param {object} bot - Telegram bot instance
+ * @param {object} msg - Telegram message object (from the user who sent /play)
+ */
+async function handlePlay(bot, msg) {
+  // Only allow one play session at a time
+  if (playSession.active) {
+    console.log('A play session is already in progress. Please wait for it to finish or cancel it.');
+    return { 
+      text: 'A play session is already in progress. Please wait for it to finish or cancel it.',
+      reply_markup: {
+        inline_keyboard: [[
+          { text: '❌ Cancel Play Session', callback_data: 'cancel_play_session' }
+        ]]
+      },
+      parse_mode: 'HTML'
+    };
+  }
+  playSession.active = true;
+  playSession.invited = [];
+  playSession.accepted = [];
+  playSession.declined = [];
+  playSession.messageIds = {};
+
+  // Find all users with chatId
+  const playerService = require('../services/playerService');
+  const players = await playerService.getAllPlayers();
+  const usersWithChatId = players.filter(p => p.chatId);
+
+  // Identify initiator
+  const initiatorUsername = msg.from.username;
+  playSession.invited = usersWithChatId.map(p => p.username).filter(u => u !== initiatorUsername);
+  playSession.accepted = [initiatorUsername];
+
+  // Send invitation to each user except initiator
+  for (const player of usersWithChatId) {
+    if (player.username === initiatorUsername) continue;
+    const opts = {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: 'Yes', callback_data: `play_yes_${player.username}` },
+          { text: 'No', callback_data: `play_no_${player.username}` }
+        ]]
+      },
+      parse_mode: 'HTML'
+    };
+    const sentMsg = await bot.sendMessage(player.chatId, '🎲 <b>Do you want to join a foosball match?</b>', opts);
+    playSession.messageIds[player.username] = sentMsg.message_id;
+  }
+  return { text: `Invited ${usersWithChatId.length - 1} players to join the match.` };
+}
+
+/**
  * Handle /stats command
  */
 async function handleStats(msg) {
@@ -432,6 +494,8 @@ async function handleHelp(msg) {
                    `📊 <b>Statistics:</b>\n` +
                    `• <code>/stats</code> - View your personal statistics\n` +
                    `• <code>/leaderboard</code> - View current season leaderboard\n\n` +
+                   `🎲 <b>Play:</b>\n` +
+                   `• <code>/play</code> - Invite players to join a match\n\n` +
                    `❓ <b>Help:</b>\n` +
                    `• <code>/help</code> - Show this help message\n\n` +
                    `<i>All players start with 1000 Elo rating. Matches are grouped into monthly seasons.</i>`;
@@ -460,6 +524,8 @@ module.exports = {
   handleLeaderboard,
   handleHelp,
   handleUnknown,
+  handlePlay,
+  playSession,
   // Helper functions for testing
   __getMatchCreationState: () => matchCreationState,
   __setMatchCreationState: (newState) => {
