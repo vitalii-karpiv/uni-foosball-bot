@@ -10,15 +10,19 @@ describe('Match Creation Integration', () => {
     jest.clearAllMocks();
     // Clear match creation state
     commandHandlers.__setMatchCreationState(new Map());
+    // Mock updatePlayerChatId to return the player as-is
+    playerService.updatePlayerChatId = jest.fn().mockImplementation((username, chatId) => 
+      Promise.resolve({ username, chatId })
+    );
   });
 
   it('should complete full match creation flow', async () => {
     // Mock players
     const mockPlayers = [
-      { username: 'player1', name: 'Player 1' },
-      { username: 'player2', name: 'Player 2' },
-      { username: 'player3', name: 'Player 3' },
-      { username: 'player4', name: 'Player 4' }
+      { username: 'player1', name: 'Player 1', chatId: '123' },
+      { username: 'player2', name: 'Player 2', chatId: '456' },
+      { username: 'player3', name: 'Player 3', chatId: '789' },
+      { username: 'player4', name: 'Player 4', chatId: '012' }
     ];
     
     playerService.getAllPlayers.mockResolvedValue(mockPlayers);
@@ -127,10 +131,10 @@ describe('Match Creation Integration', () => {
 
   it('should handle deselection of players', async () => {
     const mockPlayers = [
-      { username: 'player1', name: 'Player 1' },
-      { username: 'player2', name: 'Player 2' },
-      { username: 'player3', name: 'Player 3' },
-      { username: 'player4', name: 'Player 4' }
+      { username: 'player1', name: 'Player 1', chatId: '123' },
+      { username: 'player2', name: 'Player 2', chatId: '456' },
+      { username: 'player3', name: 'Player 3', chatId: '789' },
+      { username: 'player4', name: 'Player 4', chatId: '012' }
     ];
     
     playerService.getAllPlayers.mockResolvedValue(mockPlayers);
@@ -159,10 +163,10 @@ describe('Match Creation Integration', () => {
 
   it('should handle session timeout', async () => {
     const mockPlayers = [
-      { username: 'player1', name: 'Player 1' },
-      { username: 'player2', name: 'Player 2' },
-      { username: 'player3', name: 'Player 3' },
-      { username: 'player4', name: 'Player 4' }
+      { username: 'player1', name: 'Player 1', chatId: '123' },
+      { username: 'player2', name: 'Player 2', chatId: '456' },
+      { username: 'player3', name: 'Player 3', chatId: '789' },
+      { username: 'player4', name: 'Player 4', chatId: '012' }
     ];
     
     playerService.getAllPlayers.mockResolvedValue(mockPlayers);

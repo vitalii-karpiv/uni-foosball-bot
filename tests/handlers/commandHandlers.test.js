@@ -8,6 +8,10 @@ jest.mock('../../src/services/matchService');
 describe('commandHandlers', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Mock updatePlayerChatId to return the player as-is
+    playerService.updatePlayerChatId = jest.fn().mockImplementation((username, chatId) => 
+      Promise.resolve({ username, chatId })
+    );
   });
 
   describe('handleRegister', () => {
@@ -172,13 +176,13 @@ describe('commandHandlers', () => {
       commandHandlers.__setMatchCreationState(mockMap);
       
       const mockPlayers = [
-        { username: 'player1', name: 'Player 1' },
-        { username: 'player2', name: 'Player 2' },
-        { username: 'player3', name: 'Player 3' },
-        { username: 'player4', name: 'Player 4' }
+        { username: 'player1', name: 'Player 1', chatId: '123' },
+        { username: 'player2', name: 'Player 2', chatId: '456' },
+        { username: 'player3', name: 'Player 3', chatId: '789' },
+        { username: 'player4', name: 'Player 4', chatId: '012' }
       ];
       playerService.getAllPlayers.mockResolvedValue(mockPlayers);
-      playerService.getPlayerByUsername.mockResolvedValue({ username: 'player1', name: 'Player 1' });
+      playerService.getPlayerByUsername.mockResolvedValue({ username: 'player1', name: 'Player 1', chatId: '123' });
       
       const callbackQuery = {
         message: { chat: { id: 123 } },
@@ -198,8 +202,8 @@ describe('commandHandlers', () => {
         userId: 456,
         step: 'select_winners',
         winners: [
-          { username: 'player1', name: 'Player 1' },
-          { username: 'player2', name: 'Player 2' }
+          { username: 'player1', name: 'Player 1', chatId: '123' },
+          { username: 'player2', name: 'Player 2', chatId: '456' }
         ],
         losers: [],
         timestamp: Date.now()
@@ -207,13 +211,13 @@ describe('commandHandlers', () => {
       commandHandlers.__setMatchCreationState(mockMap);
       
       const mockPlayers = [
-        { username: 'player1', name: 'Player 1' },
-        { username: 'player2', name: 'Player 2' },
-        { username: 'player3', name: 'Player 3' },
-        { username: 'player4', name: 'Player 4' }
+        { username: 'player1', name: 'Player 1', chatId: '123' },
+        { username: 'player2', name: 'Player 2', chatId: '456' },
+        { username: 'player3', name: 'Player 3', chatId: '789' },
+        { username: 'player4', name: 'Player 4', chatId: '012' }
       ];
       playerService.getAllPlayers.mockResolvedValue(mockPlayers);
-      playerService.getPlayerByUsername.mockResolvedValue({ username: 'player3', name: 'Player 3' });
+      playerService.getPlayerByUsername.mockResolvedValue({ username: 'player3', name: 'Player 3', chatId: '789' });
       
       const callbackQuery = {
         message: { chat: { id: 123 } },
@@ -232,8 +236,8 @@ describe('commandHandlers', () => {
         userId: 456,
         step: 'select_winners',
         winners: [
-          { username: 'player1', name: 'Player 1' },
-          { username: 'player2', name: 'Player 2' }
+          { username: 'player1', name: 'Player 1', chatId: '123' },
+          { username: 'player2', name: 'Player 2', chatId: '456' }
         ],
         losers: [],
         timestamp: Date.now()
@@ -241,10 +245,10 @@ describe('commandHandlers', () => {
       commandHandlers.__setMatchCreationState(mockMap);
       
       const mockPlayers = [
-        { username: 'player1', name: 'Player 1' },
-        { username: 'player2', name: 'Player 2' },
-        { username: 'player3', name: 'Player 3' },
-        { username: 'player4', name: 'Player 4' }
+        { username: 'player1', name: 'Player 1', chatId: '123' },
+        { username: 'player2', name: 'Player 2', chatId: '456' },
+        { username: 'player3', name: 'Player 3', chatId: '789' },
+        { username: 'player4', name: 'Player 4', chatId: '012' }
       ];
       playerService.getAllPlayers.mockResolvedValue(mockPlayers);
       
@@ -266,12 +270,12 @@ describe('commandHandlers', () => {
         userId: 456,
         step: 'select_losers',
         winners: [
-          { username: 'player1', name: 'Player 1' },
-          { username: 'player2', name: 'Player 2' }
+          { username: 'player1', name: 'Player 1', chatId: '123' },
+          { username: 'player2', name: 'Player 2', chatId: '456' }
         ],
         losers: [
-          { username: 'player3', name: 'Player 3' },
-          { username: 'player4', name: 'Player 4' }
+          { username: 'player3', name: 'Player 3', chatId: '789' },
+          { username: 'player4', name: 'Player 4', chatId: '012' }
         ],
         timestamp: Date.now()
       });

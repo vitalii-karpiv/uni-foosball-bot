@@ -43,6 +43,35 @@ console.log('🔧 Environment check passed');
 // Connect to database
 connectToDatabase();
 
+// Function to send status updates to all users
+async function sendPlayStatusUpdate(bot, playSession) {
+  const playerService = require('./services/playerService');
+  const players = await playerService.getAllPlayers();
+  const usersWithChatId = players.filter(p => p.chatId);
+  
+  const acceptedUsernames = playSession.accepted.map(u => `@${u}`).join(', ');
+  const declinedUsernames = playSession.declined.map(u => `@${u}`).join(', ');
+  const pendingUsernames = playSession.invited.filter(u => 
+    !playSession.accepted.includes(u) && !playSession.declined.includes(u)
+  ).map(u => `@${u}`).join(', ');
+  
+  let statusText = '🎲 <b>Play Session Status</b>\n\n';
+  statusText += `✅ <b>Accepted:</b> ${acceptedUsernames || 'None'}\n`;
+  statusText += `❌ <b>Declined:</b> ${declinedUsernames || 'None'}\n`;
+  if (pendingUsernames) {
+    statusText += `⏳ <b>Pending:</b> ${pendingUsernames}\n`;
+  }
+  statusText += `\n📊 <b>Progress:</b> ${playSession.accepted.length}/4 players`;
+  
+  for (const player of usersWithChatId) {
+    try {
+      await bot.sendMessage(player.chatId, statusText, { parse_mode: 'HTML' });
+    } catch (error) {
+      console.error(`Failed to send status update to ${player.username}:`, error);
+    }
+  }
+}
+
 // Handle /start command
 bot.onText(/^\/start$/, async (msg) => {
   try {
@@ -140,6 +169,10 @@ bot.on('callback_query', async (callbackQuery) => {
           message_id: message.message_id
         });
       }
+      
+      // Send status update to all users
+      await sendPlayStatusUpdate(bot, playSession);
+      
       // If 4 accepted, notify all
       if (playSession.accepted.length === 4) {
         const acceptedUsernames = playSession.accepted.map(u => `@${u}`).join(', ');
