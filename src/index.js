@@ -191,7 +191,7 @@ bot.on('callback_query', async (callbackQuery) => {
     console.log('📨 Received callback query from:', callbackQuery.from.username);
     console.log('📝 Callback data:', callbackQuery.data);
     
-    const response = await handlePlayerSelection(callbackQuery);
+    const response = await handlePlayerSelection(callbackQuery, bot);
     
     if (response) {
       await bot.editMessageText(response.text, {

@@ -150,8 +150,10 @@ function createPlayerSelectionKeyboard(players, selectedPlayers) {
 
 /**
  * Handle player selection callback
+ * @param {object} callbackQuery - Telegram callback query
+ * @param {object} bot - Telegram bot instance (optional, for notifications)
  */
-async function handlePlayerSelection(callbackQuery) {
+async function handlePlayerSelection(callbackQuery, bot = null) {
   try {
     const data = callbackQuery.data;
     const chatId = callbackQuery.message.chat.id;
@@ -183,46 +185,42 @@ async function handlePlayerSelection(callbackQuery) {
       }
       
       const players = await playerService.getAllPlayers();
-             const currentSelection = state.step === 'select_winners' ? state.winners : state.losers;
-       const keyboard = createPlayerSelectionKeyboard(players, currentSelection);
-       
-       const stepText = state.step === 'select_winners' ? '2 winners' : '2 losers';
-       
-       return {
-         text: `🏆 <b>Creating New Match</b>\n\nPlease select <b>${stepText}</b> for this match:`,
-         parse_mode: 'HTML',
-         reply_markup: {
-           inline_keyboard: keyboard
-         }
-       };
-     }
-     
-     // Handle cancel action
-     if (data === 'cancel_match_creation') {
-       matchCreationState.delete(chatId);
-       return {
-         text: '❌ <b>Match creation cancelled.</b>',
-         parse_mode: 'HTML'
-       };
-     }
-     
-     if (data.startsWith('player_')) {
-       const selectedUsername = data.replace('player_', '');
-       let player = await playerService.getPlayerByUsername(selectedUsername);
-       // Patch chatId if missing
-       if (player && !player.chatId && callbackQuery.from && callbackQuery.message && callbackQuery.message.chat && callbackQuery.message.chat.id) {
-         player = await playerService.updatePlayerChatId(player.username, callbackQuery.message.chat.id);
-       }
-       
-       if (!player) {
-         return {
-           text: '❌ <b>Player not found!</b>\n\nPlease try again.',
-           parse_mode: 'HTML'
-         };
-       }
-       
-              const currentSelectionForPlayer = state.step === 'select_winners' ? state.winners : state.losers;
-       const isAlreadySelected = currentSelectionForPlayer.some(p => p.username === player.username);
+      const currentSelection = state.step === 'select_winners' ? state.winners : state.losers;
+      const keyboard = createPlayerSelectionKeyboard(players, currentSelection);
+      
+      const stepText = state.step === 'select_winners' ? '2 winners' : '2 losers';
+      
+      return {
+        text: `🏆 <b>Creating New Match</b>\n\nPlease select <b>${stepText}</b> for this match:`,
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: keyboard
+        }
+      };
+    }
+    
+    // Handle cancel action
+    if (data === 'cancel_match_creation') {
+      matchCreationState.delete(chatId);
+      return {
+        text: '❌ <b>Match creation cancelled.</b>',
+        parse_mode: 'HTML'
+      };
+    }
+    
+    if (data.startsWith('player_')) {
+      const selectedUsername = data.replace('player_', '');
+      let player = await playerService.getPlayerByUsername(selectedUsername);
+      
+      if (!player) {
+        return {
+          text: '❌ <b>Player not found!</b>\n\nPlease try again.',
+          parse_mode: 'HTML'
+        };
+      }
+      
+      const currentSelectionForPlayer = state.step === 'select_winners' ? state.winners : state.losers;
+      const isAlreadySelected = currentSelectionForPlayer.some(p => p.username === player.username);
       
       if (isAlreadySelected) {
         // Remove player from selection
@@ -252,13 +250,13 @@ async function handlePlayerSelection(callbackQuery) {
         }
       }
       
-             // Update keyboard
-       const players = await playerService.getAllPlayers();
-       const currentSelectionForKeyboard = state.step === 'select_winners' ? state.winners : state.losers;
-       const keyboard = createPlayerSelectionKeyboard(players, currentSelectionForKeyboard);
-       
-       // Add continue button if 2 players selected
-       if (currentSelectionForKeyboard.length === 2) {
+      // Update keyboard
+      const players = await playerService.getAllPlayers();
+      const currentSelectionForKeyboard = state.step === 'select_winners' ? state.winners : state.losers;
+      const keyboard = createPlayerSelectionKeyboard(players, currentSelectionForKeyboard);
+      
+      // Add continue button if 2 players selected
+      if (currentSelectionForKeyboard.length === 2) {
         keyboard.push([{
           text: '➡️ Continue',
           callback_data: 'continue_selection'
@@ -326,14 +324,36 @@ async function handlePlayerSelection(callbackQuery) {
         // Format Elo changes with + or - sign
         const formatEloChange = (change) => change >= 0 ? `+${change}` : `${change}`;
         
-        return {
-          text: `🏆 <b>Match Recorded!</b>\n\n` +
+        const matchNotification = `🏆 <b>New Match Recorded!</b>\n\n` +
                 `<b>Teams:</b>\n` +
                 `Winners: @${matchRecord.winners[0].username} + @${matchRecord.winners[1].username}\n` +
                 `Losers: @${matchRecord.losers[0].username} + @${matchRecord.losers[1].username}\n\n` +
                 `📊 <b>Elo Changes:</b>\n` +
                 `Winners: ${formatEloChange(eloResult.team1Changes[0])}, ${formatEloChange(eloResult.team1Changes[1])}\n` +
-                `Losers: ${formatEloChange(eloResult.team2Changes[0])}, ${formatEloChange(eloResult.team2Changes[1])}`,
+                `Losers: ${formatEloChange(eloResult.team2Changes[0])}, ${formatEloChange(eloResult.team2Changes[1])}`;
+        
+        // Send notification to all users with chatId
+        if (bot) {
+          const players = await playerService.getAllPlayers();
+          const usersWithChatId = players.filter(p => p.chatId);
+          const matchParticipants = [...winnerUsernames, ...loserUsernames];
+          
+          for (const player of usersWithChatId) {
+            // Skip sending notification to players who participated in this match
+            if (matchParticipants.includes(player.username)) {
+              continue;
+            }
+            
+            try {
+              await bot.sendMessage(player.chatId, matchNotification, { parse_mode: 'HTML' });
+            } catch (error) {
+              console.error(`Failed to send match notification to ${player.username}:`, error);
+            }
+          }
+        }
+        
+        return {
+          text: matchNotification,
           parse_mode: 'HTML'
         };
       }
@@ -537,4 +557,4 @@ module.exports = {
       }
     }
   }
-}; 
+};
