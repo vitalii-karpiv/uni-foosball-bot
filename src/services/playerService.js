@@ -5,9 +5,10 @@ const Match = require('../models/Match');
  * Register a new player
  * @param {string} username - Telegram username
  * @param {string} name - Optional full name
+ * @param {string} chatId - Telegram chat ID
  * @returns {Promise<Object>} Created player object
  */
-async function registerPlayer(username, name = null) {
+async function registerPlayer(username, name = null, chatId = null) {
   try {
     // Remove @ if present
     const cleanUsername = username.replace('@', '');
@@ -22,7 +23,8 @@ async function registerPlayer(username, name = null) {
     const player = new Player({
       username: cleanUsername,
       name: name || cleanUsername,
-      elo: 1000
+      elo: 1000,
+      chatId: chatId
     });
     
     await player.save();
@@ -75,6 +77,21 @@ async function updatePlayerElo(playerId, newElo) {
   } catch (error) {
     throw error;
   }
+}
+
+/**
+ * Update player's chatId by username
+ * @param {string} username - Telegram username
+ * @param {string} chatId - Telegram chat ID
+ * @returns {Promise<Object>} Updated player object
+ */
+async function updatePlayerChatId(username, chatId) {
+  const cleanUsername = username.replace('@', '');
+  return await Player.findOneAndUpdate(
+    { username: cleanUsername },
+    { chatId },
+    { new: true }
+  );
 }
 
 /**
@@ -134,5 +151,6 @@ module.exports = {
   getPlayerById,
   updatePlayerElo,
   getAllPlayers,
-  getSeasonLeaderboard
+  getSeasonLeaderboard,
+  updatePlayerChatId
 }; 

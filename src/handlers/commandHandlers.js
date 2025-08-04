@@ -26,7 +26,7 @@ async function handleRegister(msg) {
     const name = lastName ? `${firstName} ${lastName}` : firstName;
     console.log('✅ Registering user:', username, 'with name:', name);
     
-    await playerService.registerPlayer(username, name);
+    await playerService.registerPlayer(username, name, msg.chat.id);
     
     return {
       text: `✅ <b>Welcome to Foosbot!</b>\n\nYou've been successfully registered as <b>@${username}</b>.\n\nYour starting Elo rating is <b>1000</b>.\n\nUse /help to see available commands.`,
@@ -144,9 +144,9 @@ function createPlayerSelectionKeyboard(players, selectedPlayers) {
  */
 async function handlePlayerSelection(callbackQuery) {
   try {
+    const data = callbackQuery.data;
     const chatId = callbackQuery.message.chat.id;
     const userId = callbackQuery.from.id;
-    const data = callbackQuery.data;
     
     const state = matchCreationState.get(chatId);
     if (!state || state.userId !== userId) {
@@ -199,7 +199,11 @@ async function handlePlayerSelection(callbackQuery) {
      
      if (data.startsWith('player_')) {
        const selectedUsername = data.replace('player_', '');
-       const player = await playerService.getPlayerByUsername(selectedUsername);
+       let player = await playerService.getPlayerByUsername(selectedUsername);
+       // Patch chatId if missing
+       if (player && !player.chatId && callbackQuery.from && callbackQuery.message && callbackQuery.message.chat && callbackQuery.message.chat.id) {
+         player = await playerService.updatePlayerChatId(player.username, callbackQuery.message.chat.id);
+       }
        
        if (!player) {
          return {
@@ -347,6 +351,11 @@ async function handleStats(msg) {
       };
     }
     
+    let player = await playerService.getPlayerByUsername(username);
+    if (player && !player.chatId && msg.chat && msg.chat.id) {
+      await playerService.updatePlayerChatId(username, msg.chat.id);
+    }
+
     const stats = await matchService.getPlayerStats(username);
     
     return {

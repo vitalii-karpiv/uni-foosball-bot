@@ -18,13 +18,13 @@ describe('commandHandlers', () => {
     });
     it('should register player and return welcome', async () => {
       playerService.registerPlayer.mockResolvedValue();
-      const msg = { from: { username: 'user', first_name: 'First', last_name: 'Last' } };
+      const msg = { from: { username: 'user', first_name: 'First', last_name: 'Last' }, chat: { id: 123 } };
       const result = await commandHandlers.handleRegister(msg);
       expect(result.text).toMatch(/Welcome to Foosbot/);
     });
     it('should return already registered if error thrown', async () => {
       playerService.registerPlayer.mockRejectedValue(new Error('Player already registered'));
-      const msg = { from: { username: 'user', first_name: 'First' } };
+      const msg = { from: { username: 'user', first_name: 'First' }, chat: { id: 123 } };
       const result = await commandHandlers.handleRegister(msg);
       expect(result.text).toMatch(/already registered/);
     });

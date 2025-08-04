@@ -93,7 +93,10 @@ The new `/match` command provides a user-friendly way to create matches:
 - `username`: Telegram username (unique)
 - `name`: Optional full name
 - `elo`: Current Elo rating (default: 1000)
+- `chatId`: Telegram chat ID (used for messaging)
 - `createdAt`: Registration date
+
+> Note: If a user was registered before the chatId attribute was added, the bot will automatically update their chatId the next time they interact with the bot (e.g., by using /stats or participating in a match). This ensures all users can receive direct messages from the bot.
 
 ### Match
 - `players`: Array of 4 player references

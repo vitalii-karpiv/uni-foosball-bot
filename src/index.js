@@ -12,6 +12,7 @@ const {
   handleHelp,
   handleUnknown
 } = require('./handlers/commandHandlers');
+const playerService = require('./services/playerService');
 
 // Check for required environment variables
 if (!process.env.TELEGRAM_BOT_TOKEN) {
@@ -155,6 +156,13 @@ bot.onText(/^\/help$/, async (msg) => {
 // Handle all other messages (including unknown commands)
 bot.on('message', async (msg) => {
   try {
+    // Patch chatId for any user message if missing
+    if (msg.from && msg.from.username && msg.chat && msg.chat.id) {
+      const player = await playerService.getPlayerByUsername(msg.from.username);
+      if (player && !player.chatId) {
+        await playerService.updatePlayerChatId(msg.from.username, msg.chat.id);
+      }
+    }
     // Only respond to commands that start with /
     if (msg.text && !msg.text.startsWith('/')) {
       console.log('📨 Received unknown command from:', msg.from.username);

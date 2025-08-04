@@ -18,10 +18,12 @@ describe('playerService', () => {
     it('should create and save a new player', async () => {
       Player.findOne.mockResolvedValue(null);
       const saveMock = jest.fn().mockResolvedValue();
-      Player.mockImplementation(() => ({ save: saveMock }));
-      const result = await playerService.registerPlayer('user', 'User Name');
+      Player.mockImplementation((data) => ({ ...data, save: saveMock }));
+      const chatId = '123456';
+      const result = await playerService.registerPlayer('user', 'User Name', chatId);
       expect(saveMock).toHaveBeenCalled();
       expect(result).toBeDefined();
+      expect(result.chatId).toBe(chatId);
     });
   });
 

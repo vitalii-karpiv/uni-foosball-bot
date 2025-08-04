@@ -16,6 +16,11 @@ const playerSchema = new mongoose.Schema({
     default: 1000,
     min: 0
   },
+  chatId: {
+    type: String,
+    required: false,
+    index: true
+  },
   createdAt: {
     type: Date,
     default: Date.now
