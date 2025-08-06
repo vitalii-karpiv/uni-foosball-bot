@@ -2,6 +2,7 @@ const playerService = require('../services/playerService');
 const matchService = require('../services/matchService');
 const seasonService = require('../services/seasonService');
 const { getCurrentSeason } = require('../utils/elo');
+const cronService = require('../services/cronService');
 
 // TODO: Store match creation state (in production, use Redis or database)
 const matchCreationState = new Map();
@@ -789,6 +790,8 @@ async function handleHelp(msg) {
                    `• <code>/season</code> - View current season statistics with rankings\n\n` +
                    `🎲 <b>Play:</b>\n` +
                    `• <code>/play</code> - Invite players to join a match\n\n` +
+                   `⚙️ <b>Admin:</b>\n` +
+                   `• <code>/newseason</code> - Manually trigger season transition\n\n` +
                    `❓ <b>Help:</b>\n` +
                    `• <code>/help</code> - Show this help message\n\n` +
                    `<i>All players start with 1000 Elo rating. Matches are grouped into monthly seasons.</i>`;
@@ -809,6 +812,47 @@ async function handleUnknown(msg) {
   };
 }
 
+/**
+ * Handle /newseason command - Manually trigger season transition (admin only)
+ */
+async function handleNewSeason(msg) {
+  try {
+    // For now, allow any registered user to trigger this
+    // In production, you might want to add admin role checking
+    const username = msg.from.username;
+    
+    if (!username) {
+      return {
+        text: '❌ You need to have a Telegram username to use this command.',
+        parse_mode: 'HTML'
+      };
+    }
+    
+    // Check if user is registered
+    const player = await playerService.getPlayerByUsername(username);
+    if (!player) {
+      return {
+        text: '❌ You need to be registered to use this command. Use /register first.',
+        parse_mode: 'HTML'
+      };
+    }
+    
+    // Trigger manual season transition
+    await cronService.manualSeasonTransition();
+    
+    return {
+      text: '✅ <b>Season transition completed!</b>\n\nA new season has been created and all players have been notified.',
+      parse_mode: 'HTML'
+    };
+  } catch (error) {
+    console.error('❌ Error in handleNewSeason:', error);
+    return {
+      text: '❌ An error occurred while creating the new season. Please try again.',
+      parse_mode: 'HTML'
+    };
+  }
+}
+
 module.exports = {
   handleRegister,
   handleMatch,
@@ -819,6 +863,7 @@ module.exports = {
   handleAlias,
   handleHelp,
   handleUnknown,
+  handleNewSeason,
   handlePlay,
   playSession,
   // Helper functions for testing

@@ -63,6 +63,7 @@ npm run dev
 - `/stats` - View your personal statistics
 - `/leaderboard` - View all-time leaderboard table with ELO, matches played, and win rate
 - `/season` - View current season statistics with rankings and points
+- `/newseason` - Manually trigger season transition (admin command)
 - `/help` - Show available commands
 
 ### Interactive Match Creation
@@ -89,6 +90,34 @@ The new `/match` command provides a user-friendly way to create matches:
 /stats
 /leaderboard
 ```
+
+## Automated Season Management
+
+The bot includes automated season transitions that run on a schedule:
+
+### Automatic Season Transitions
+- **Schedule**: Runs on the 1st of every month at 00:01 UTC
+- **Process**: 
+  1. Creates a new season document for the current month
+  2. Records season start Elo ratings for all players
+  3. Notifies all players about the previous season's results
+  4. Announces season winners (top 3 players by points)
+
+### Season Winner Notifications
+Players receive personalized notifications including:
+- 🏆 Season results summary
+- 🎉 Congratulations for winners (1st, 2nd, 3rd place)
+- 🏅 Winner podium with medals
+- 📊 Individual performance details
+
+### Manual Season Transition
+Use `/newseason` command to manually trigger season transition (useful for testing or special events).
+
+### Season Start Elo Tracking
+Each player's Elo rating at the start of a season is automatically recorded, allowing for:
+- Season-specific Elo gains calculation
+- Fair comparison of performance across seasons
+- Historical tracking of player progression
 
 ## Database Models
 

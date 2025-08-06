@@ -13,9 +13,11 @@ const {
   handleAlias,
   handleHelp,
   handleUnknown,
+  handleNewSeason,
   handlePlay
 } = require('./handlers/commandHandlers');
 const playerService = require('./services/playerService');
+const cronService = require('./services/cronService');
 
 // Check for required environment variables
 if (!process.env.TELEGRAM_BOT_TOKEN) {
@@ -44,6 +46,10 @@ console.log('🔧 Environment check passed');
 
 // Connect to database
 connectToDatabase();
+
+// Initialize and start cron service
+cronService.initializeCronService(bot);
+cronService.startCronJobs();
 
 // Function to send status updates to all users
 async function sendPlayStatusUpdate(bot, playSession) {
@@ -280,6 +286,19 @@ bot.onText(/^\/help$/, async (msg) => {
   }
 });
 
+// Handle /newseason command
+bot.onText(/^\/newseason$/, async (msg) => {
+  try {
+    console.log('📨 Received /newseason command from:', msg.from.username);
+    const chatId = msg.chat.id;
+    const response = await handleNewSeason(msg);
+    await bot.sendMessage(chatId, response.text, { parse_mode: response.parse_mode });
+  } catch (error) {
+    console.error('Error handling /newseason command:', error);
+    await bot.sendMessage(msg.chat.id, '❌ An error occurred while creating new season. Please try again.');
+  }
+});
+
 // Handle all other messages (including unknown commands)
 bot.on('message', async (msg) => {
   try {
@@ -320,12 +339,14 @@ bot.on('polling_error', (error) => {
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\n🛑 Shutting down Foosbot...');
+  cronService.stopCronJobs();
   bot.stopPolling();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
   console.log('\n🛑 Shutting down Foosbot...');
+  cronService.stopCronJobs();
   bot.stopPolling();
   process.exit(0);
 });
