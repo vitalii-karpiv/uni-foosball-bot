@@ -9,6 +9,7 @@ const {
   handlePlayerSelection,
   handleStats,
   handleLeaderboard,
+  handleSeason,
   handleAlias,
   handleHelp,
   handleUnknown,
@@ -237,6 +238,19 @@ bot.onText(/^\/leaderboard$/, async (msg) => {
   } catch (error) {
     console.error('Error handling /leaderboard command:', error);
     await bot.sendMessage(msg.chat.id, '❌ An error occurred while fetching the leaderboard. Please try again.');
+  }
+});
+
+// Handle /season command
+bot.onText(/^\/season$/, async (msg) => {
+  try {
+    console.log('📨 Received /season command from:', msg.from.username);
+    const chatId = msg.chat.id;
+    const response = await handleSeason(msg);
+    await bot.sendMessage(chatId, response.text, { parse_mode: response.parse_mode });
+  } catch (error) {
+    console.error('Error handling /season command:', error);
+    await bot.sendMessage(msg.chat.id, '❌ An error occurred while fetching season statistics. Please try again.');
   }
 });
 

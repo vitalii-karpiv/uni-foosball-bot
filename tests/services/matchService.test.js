@@ -1,8 +1,10 @@
 const matchService = require('../../src/services/matchService');
 const playerService = require('../../src/services/playerService');
+const seasonService = require('../../src/services/seasonService');
 const Match = require('../../src/models/Match');
 
 jest.mock('../../src/services/playerService');
+jest.mock('../../src/services/seasonService');
 jest.mock('../../src/models/Match');
 
 describe('matchService', () => {
@@ -48,9 +50,11 @@ describe('matchService', () => {
         save: saveMock,
         populate: populateMock
       }));
+      seasonService.updateSeasonStats.mockResolvedValue();
       const result = await matchService.recordMatch(['a', 'b'], ['c', 'd'], 1);
       expect(saveMock).toHaveBeenCalled();
       expect(populateMock).toHaveBeenCalledWith('players winners losers');
+      expect(seasonService.updateSeasonStats).toHaveBeenCalled();
       expect(result).toHaveProperty('match');
       expect(result).toHaveProperty('eloResult');
       expect(result).toHaveProperty('winners');

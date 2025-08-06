@@ -1,5 +1,6 @@
 const playerService = require('../services/playerService');
 const matchService = require('../services/matchService');
+const seasonService = require('../services/seasonService');
 const { getCurrentSeason } = require('../utils/elo');
 
 // TODO: Store match creation state (in production, use Redis or database)
@@ -268,53 +269,26 @@ async function handlePlayerSelection(callbackQuery, bot = null) {
       
       // Add continue button if 2 players selected
       if (currentSelectionForKeyboard.length === 2) {
-        // If we're selecting losers and have 2 losers, automatically create the match
+        // If we're selecting losers and have 2 losers, move to dry win question
         if (state.step === 'select_losers') {
-          // Record the match
-          const winnerUsernames = state.winners.map(p => p.username);
-          const loserUsernames = state.losers.map(p => p.username);
+          // Move to dry win question
+          state.step = 'ask_dry_win';
+          state.timestamp = Date.now(); // Reset timestamp
           
-          const result = await matchService.recordMatch(winnerUsernames, loserUsernames, 1);
-          
-          // Clear the state
-          matchCreationState.delete(chatId);
-          
-          const { match: matchRecord, eloResult } = result;
-          
-          // Format Elo changes with + or - sign
-          const formatEloChange = (change) => change >= 0 ? `+${change}` : `${change}`;
-          
-          const matchNotification = `🏆 <b>New Match Recorded!</b>\n\n` +
-                  `<b>Teams:</b>\n` +
-                  `Winners: @${matchRecord.winners[0].username} + @${matchRecord.winners[1].username}\n` +
-                  `Losers: @${matchRecord.losers[0].username} + @${matchRecord.losers[1].username}\n\n` +
-                  `📊 <b>Elo Changes:</b>\n` +
-                  `Winners: ${formatEloChange(eloResult.team1Changes[0])}, ${formatEloChange(eloResult.team1Changes[1])}\n` +
-                  `Losers: ${formatEloChange(eloResult.team2Changes[0])}, ${formatEloChange(eloResult.team2Changes[1])}`;
-          
-          // Send notification to all users with chatId
-          if (bot) {
-            const players = await playerService.getAllPlayers();
-            const usersWithChatId = players.filter(p => p.chatId);
-            const matchParticipants = [...winnerUsernames, ...loserUsernames];
-            
-            for (const player of usersWithChatId) {
-              // Skip sending notification to players who participated in this match
-              if (matchParticipants.includes(player.username)) {
-                continue;
-              }
-              
-              try {
-                await bot.sendMessage(player.chatId, matchNotification, { parse_mode: 'HTML' });
-              } catch (error) {
-                console.error(`Failed to send match notification to ${player.username}:`, error);
-              }
-            }
-          }
+          const keyboard = [
+            [
+              { text: '✅ Yes, it was a dry win', callback_data: 'dry_win_yes' },
+              { text: '❌ No, it was not a dry win', callback_data: 'dry_win_no' }
+            ],
+            [{ text: '❌ Cancel', callback_data: 'cancel_match_creation' }]
+          ];
           
           return {
-            text: matchNotification,
-            parse_mode: 'HTML'
+            text: `🏆 <b>Creating New Match</b>\n\nWinners: ${state.winners.map(p => p.name || p.username).join(', ')}\nLosers: ${state.losers.map(p => p.name || p.username).join(', ')}\n\n<b>Was this a dry win?</b>\n(A dry win means the losing team scored 0 goals)`,
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: keyboard
+            }
           };
         } else {
           // For winners selection, show continue button
@@ -364,7 +338,7 @@ async function handlePlayerSelection(callbackQuery, bot = null) {
             inline_keyboard: keyboard
           }
         };
-      } else {
+      } else if (state.step === 'select_losers') {
         if (state.losers.length !== 2) {
           return {
             text: '❌ <b>Please select exactly 2 losers!</b>',
@@ -372,53 +346,86 @@ async function handlePlayerSelection(callbackQuery, bot = null) {
           };
         }
         
-        // Record the match
-        const winnerUsernames = state.winners.map(p => p.username);
-        const loserUsernames = state.losers.map(p => p.username);
+        // Move to dry win question
+        state.step = 'ask_dry_win';
+        state.timestamp = Date.now(); // Reset timestamp
         
-        const result = await matchService.recordMatch(winnerUsernames, loserUsernames, 1);
-        
-        // Clear the state
-        matchCreationState.delete(chatId);
-        
-        const { match: matchRecord, eloResult } = result;
-        
-        // Format Elo changes with + or - sign
-        const formatEloChange = (change) => change >= 0 ? `+${change}` : `${change}`;
-        
-        const matchNotification = `🏆 <b>New Match Recorded!</b>\n\n` +
-                `<b>Teams:</b>\n` +
-                `Winners: @${matchRecord.winners[0].username} + @${matchRecord.winners[1].username}\n` +
-                `Losers: @${matchRecord.losers[0].username} + @${matchRecord.losers[1].username}\n\n` +
-                `📊 <b>Elo Changes:</b>\n` +
-                `Winners: ${formatEloChange(eloResult.team1Changes[0])}, ${formatEloChange(eloResult.team1Changes[1])}\n` +
-                `Losers: ${formatEloChange(eloResult.team2Changes[0])}, ${formatEloChange(eloResult.team2Changes[1])}`;
-        
-        // Send notification to all users with chatId
-        if (bot) {
-          const players = await playerService.getAllPlayers();
-          const usersWithChatId = players.filter(p => p.chatId);
-          const matchParticipants = [...winnerUsernames, ...loserUsernames];
-          
-          for (const player of usersWithChatId) {
-            // Skip sending notification to players who participated in this match
-            if (matchParticipants.includes(player.username)) {
-              continue;
-            }
-            
-            try {
-              await bot.sendMessage(player.chatId, matchNotification, { parse_mode: 'HTML' });
-            } catch (error) {
-              console.error(`Failed to send match notification to ${player.username}:`, error);
-            }
-          }
-        }
+        const keyboard = [
+          [
+            { text: '✅ Yes, it was a dry win', callback_data: 'dry_win_yes' },
+            { text: '❌ No, it was not a dry win', callback_data: 'dry_win_no' }
+          ],
+          [{ text: '❌ Cancel', callback_data: 'cancel_match_creation' }]
+        ];
         
         return {
-          text: matchNotification,
+          text: `🏆 <b>Creating New Match</b>\n\nWinners: ${state.winners.map(p => p.name || p.username).join(', ')}\nLosers: ${state.losers.map(p => p.name || p.username).join(', ')}\n\n<b>Was this a dry win?</b>\n(A dry win means the losing team scored 0 goals)`,
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: keyboard
+          }
+        };
+      }
+    }
+    
+    // Handle dry win selection
+    if (data === 'dry_win_yes' || data === 'dry_win_no') {
+      if (state.step !== 'ask_dry_win') {
+        return {
+          text: '❌ <b>Invalid action!</b>\n\nPlease complete the match creation process.',
           parse_mode: 'HTML'
         };
       }
+      
+      const isDryWin = data === 'dry_win_yes';
+      
+      // Record the match
+      const winnerUsernames = state.winners.map(p => p.username);
+      const loserUsernames = state.losers.map(p => p.username);
+      
+      const result = await matchService.recordMatch(winnerUsernames, loserUsernames, 1, isDryWin);
+      
+      // Clear the state
+      matchCreationState.delete(chatId);
+      
+      const { match: matchRecord, eloResult } = result;
+      
+      // Format Elo changes with + or - sign
+      const formatEloChange = (change) => change >= 0 ? `+${change}` : `${change}`;
+      
+      const dryWinText = isDryWin ? ' (Dry Win)' : '';
+      const matchNotification = `🏆 <b>New Match Recorded!</b>${dryWinText}\n\n` +
+              `<b>Teams:</b>\n` +
+              `Winners: @${matchRecord.winners[0].username} + @${matchRecord.winners[1].username}\n` +
+              `Losers: @${matchRecord.losers[0].username} + @${matchRecord.losers[1].username}\n\n` +
+              `📊 <b>Elo Changes:</b>\n` +
+              `Winners: ${formatEloChange(eloResult.team1Changes[0])}, ${formatEloChange(eloResult.team1Changes[1])}\n` +
+              `Losers: ${formatEloChange(eloResult.team2Changes[0])}, ${formatEloChange(eloResult.team2Changes[1])}`;
+      
+      // Send notification to all users with chatId
+      if (bot) {
+        const players = await playerService.getAllPlayers();
+        const usersWithChatId = players.filter(p => p.chatId);
+        const matchParticipants = [...winnerUsernames, ...loserUsernames];
+        
+        for (const player of usersWithChatId) {
+          // Skip sending notification to players who participated in this match
+          if (matchParticipants.includes(player.username)) {
+            continue;
+          }
+          
+          try {
+            await bot.sendMessage(player.chatId, matchNotification, { parse_mode: 'HTML' });
+          } catch (error) {
+            console.error(`Failed to send match notification to ${player.username}:`, error);
+          }
+        }
+      }
+      
+      return {
+        text: matchNotification,
+        parse_mode: 'HTML'
+      };
     }
     
     return null;
@@ -547,14 +554,17 @@ async function handleLeaderboard(msg) {
     
     // Create table header
     text += `<code># | Player     | ELO  | WR\n`;
-    text += `--|------------|------|----\n`;
+    text += `--|------------|------|-----\n`;
     
     leaderboard.forEach((player, index) => {
       const rank = index + 1;
-      const displayName = player.alias || player.username;
+      const displayName = getDisplayName(player);
       
       // Format the table row with compact spacing
-      text += `${rank.toString()} | ${displayName.padEnd(10)} | ${player.elo.toString().padStart(4)} | ${player.winRate}%\n`;
+      text += formatCustomTableRow(rank, displayName, [
+        { value: player.elo, padding: 4 },
+        { value: `${player.winRate}%`, padding: 0 }
+      ]);
     });
     
     text += `</code>`;
@@ -564,6 +574,139 @@ async function handleLeaderboard(msg) {
       parse_mode: 'HTML'
     };
   } catch (error) {
+    throw error;
+  }
+}
+
+/**
+ * Helper function to get display name for a player
+ * @param {Object} player - Player object
+ * @returns {string} Display name (alias or username)
+ */
+function getDisplayName(player) {
+  return player.alias || player.username;
+}
+
+/**
+ * Helper function to calculate points based on rank
+ * @param {number} rank - Player rank (1-based)
+ * @returns {number} Points (3 for 1st, 2 for 2nd, 1 for 3rd, 0 for others)
+ */
+function calculateRankPoints(rank) {
+  return rank <= 3 ? (4 - rank) : 0;
+}
+
+/**
+ * Helper function to format a table row
+ * @param {number} rank - Player rank
+ * @param {string} displayName - Player display name
+ * @param {number} value - Value to display
+ * @param {number} points - Points earned (optional)
+ * @param {boolean} isSummary - Whether this is a summary table row
+ * @returns {string} Formatted table row
+ */
+function formatTableRow(rank, displayName, value, points = null, isSummary = false) {
+  const rankStr = rank.toString();
+  const nameStr = displayName.padEnd(10);
+  const valueStr = value.toString().padStart(isSummary ? 6 : 5);
+  
+  if (isSummary) {
+    const earned = value > 0 ? value : '-';
+    return `${rankStr} | ${nameStr} | ${valueStr}\n`;
+  } else {
+    const pointsDisplay = points > 0 ? points.toString() : '-';
+    return `${rankStr} | ${nameStr} | ${valueStr} | ${pointsDisplay.padStart(5)}\n`;
+  }
+}
+
+/**
+ * Helper function to format a custom table row with multiple columns
+ * @param {number} rank - Player rank
+ * @param {string} displayName - Player display name
+ * @param {Array} columns - Array of column values with their padding
+ * @returns {string} Formatted table row
+ */
+function formatCustomTableRow(rank, displayName, columns) {
+  const rankStr = rank.toString();
+  const nameStr = displayName.padEnd(10);
+  const columnStrs = columns.map(col => col.value.toString().padStart(col.padding));
+  return `${rankStr} | ${nameStr} | ${columnStrs.join(' | ')}\n`;
+}
+
+/**
+ * Helper function to create a table
+ * @param {string} title - Table title
+ * @param {Array} data - Array of entries with player and value properties
+ * @param {string} valueName - Name for the value column
+ * @param {boolean} isSummary - Whether this is a summary table
+ * @returns {string} Formatted table
+ */
+function createTable(title, data, valueName = 'Value', isSummary = false) {
+  if (!data || data.length === 0) return '';
+  
+  let table = `<b>${title}</b>\n`;
+  
+  if (isSummary) {
+    table += `<code># | Player     | ${valueName}\n`;
+    table += `--|------------|--------\n`;
+  } else {
+    table += `<code># | Player     | ${valueName} | Points\n`;
+    table += `--|------------|-------|-------\n`;
+  }
+  
+  data.forEach((entry, index) => {
+    const rank = index + 1;
+    const displayName = getDisplayName(entry.player);
+    const points = isSummary ? null : calculateRankPoints(rank);
+    table += formatTableRow(rank, displayName, entry.value, points, isSummary);
+  });
+  
+  table += `</code>\n\n`;
+  return table;
+}
+
+/**
+ * Handle /season command
+ */
+async function handleSeason(msg) {
+  try {
+    const currentSeason = getCurrentSeason();
+    const seasonData = await seasonService.getSeasonLeaderboard(currentSeason);
+    
+    if (!seasonData.summary || seasonData.summary.length === 0) {
+      return {
+        text: `📊 <b>Season ${currentSeason}</b>\n\nNo matches played this season yet. Start playing to see season statistics!`,
+        parse_mode: 'HTML'
+      };
+    }
+    
+    let text = `📊 <b>Season ${currentSeason}</b>\n\n`;
+    
+    // Summary table
+    text += createTable('🏆 Season Summary', seasonData.summary, 'Points', true);
+    
+    // Category tables
+    const categoryConfigs = [
+      { key: 'eloGains', title: '🏆 Most Elo Points Gained', valueName: ' Elo ' },
+      { key: 'matchesPlayed', title: '🎮 Most Matches Played', valueName: 'Games' },
+      { key: 'dryWins', title: '💪 Most Dry Wins', valueName: 'Wins ' },
+      { key: 'totalWins', title: '🏅 Most Wins', valueName: 'Wins ' },
+      { key: 'longestStreak', title: '🔥 Longest Win Streak', valueName: 'Games' }
+    ];
+    
+    categoryConfigs.forEach(config => {
+      const categoryData = seasonData.categories[config.key];
+      if (categoryData && categoryData.length > 0) {
+        text += createTable(config.title, categoryData, config.valueName, false);
+      }
+    });
+    
+    return {
+      text: text.trim(),
+      parse_mode: 'HTML'
+    };
+  } catch (error) {
+    console.error('❌ Error in handleSeason:', error.message);
     throw error;
   }
 }
@@ -642,7 +785,8 @@ async function handleHelp(msg) {
                    `• Select 2 winners and 2 losers using buttons\n\n` +
                    `📊 <b>Statistics:</b>\n` +
                    `• <code>/stats</code> - View your personal statistics\n` +
-                   `• <code>/leaderboard</code> - View all-time leaderboard table with ELO, matches, and win rate\n\n` +
+                   `• <code>/leaderboard</code> - View all-time leaderboard table with ELO, matches, and win rate\n` +
+                   `• <code>/season</code> - View current season statistics with rankings\n\n` +
                    `🎲 <b>Play:</b>\n` +
                    `• <code>/play</code> - Invite players to join a match\n\n` +
                    `❓ <b>Help:</b>\n` +
@@ -671,6 +815,7 @@ module.exports = {
   handlePlayerSelection,
   handleStats,
   handleLeaderboard,
+  handleSeason,
   handleAlias,
   handleHelp,
   handleUnknown,

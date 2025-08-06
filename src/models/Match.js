@@ -33,6 +33,10 @@ const matchSchema = new mongoose.Schema({
   playedAt: {
     type: Date,
     default: Date.now
+  },
+  isDryWin: {
+    type: Boolean,
+    default: false
   }
 });
 

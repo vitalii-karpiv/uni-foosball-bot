@@ -8,6 +8,7 @@ A Node.js Telegram bot for managing 2v2 foosball games at work with Elo rating s
 - **Interactive Match Creation**: Create matches with button-based player selection
 - **Elo Rating System**: Automatic Elo rating calculations based on team average ratings
 - **Seasonal Organization**: Matches are grouped into monthly seasons
+- **Season Statistics**: Track player performance with points system and rankings
 - **MongoDB Storage**: All data stored in MongoDB Atlas
 - **Leaderboards**: View current standings and season statistics
 
@@ -61,6 +62,7 @@ npm run dev
 - `/match` - Start interactive match creation (select winners and losers with buttons)
 - `/stats` - View your personal statistics
 - `/leaderboard` - View all-time leaderboard table with ELO, matches played, and win rate
+- `/season` - View current season statistics with rankings and points
 - `/help` - Show available commands
 
 ### Interactive Match Creation

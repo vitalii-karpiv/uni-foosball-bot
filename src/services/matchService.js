@@ -1,15 +1,17 @@
 const Match = require('../models/Match');
 const { calculateTeamEloChanges, getCurrentSeason } = require('../utils/elo');
 const playerService = require('./playerService');
+const seasonService = require('./seasonService');
 
 /**
  * Record a new 2v2 match
  * @param {Array} team1Usernames - Array of 2 player usernames for team 1
  * @param {Array} team2Usernames - Array of 2 player usernames for team 2
  * @param {number} winnerTeam - 1 for team1 wins, 2 for team2 wins
+ * @param {boolean} isDryWin - Whether this was a dry win (losing team scored 0 goals)
  * @returns {Promise<Object>} Created match object
  */
-async function recordMatch(team1Usernames, team2Usernames, winnerTeam) {
+async function recordMatch(team1Usernames, team2Usernames, winnerTeam, isDryWin = false) {
   try {
     // Validate teams
     if (team1Usernames.length !== 2 || team2Usernames.length !== 2) {
@@ -51,6 +53,8 @@ async function recordMatch(team1Usernames, team2Usernames, winnerTeam) {
     const winnerChanges = winnerTeam === 1 ? eloResult.team1Changes : eloResult.team2Changes;
     const loserChanges = winnerTeam === 1 ? eloResult.team2Changes : eloResult.team1Changes;
 
+    // Use the provided isDryWin parameter instead of auto-detecting
+
     // Create match record
     const match = new Match({
       players: players.map(p => p._id),
@@ -60,7 +64,8 @@ async function recordMatch(team1Usernames, team2Usernames, winnerTeam) {
       eloChanges: {
         winners: winnerChanges,
         losers: loserChanges
-      }
+      },
+      isDryWin
     });
 
     await match.save();
@@ -73,6 +78,9 @@ async function recordMatch(team1Usernames, team2Usernames, winnerTeam) {
 
     // Populate references for response
     await match.populate('players winners losers');
+
+    // Update season statistics
+    await seasonService.updateSeasonStats(match);
 
     return {
       match,

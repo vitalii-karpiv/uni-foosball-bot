@@ -1,9 +1,11 @@
 const commandHandlers = require('../../src/handlers/commandHandlers');
 const playerService = require('../../src/services/playerService');
 const matchService = require('../../src/services/matchService');
+const seasonService = require('../../src/services/seasonService');
 
 jest.mock('../../src/services/playerService');
 jest.mock('../../src/services/matchService');
+jest.mock('../../src/services/seasonService');
 
 describe('commandHandlers', () => {
   beforeEach(() => {
@@ -268,11 +270,41 @@ describe('commandHandlers', () => {
       expect(result.text).toMatch(/Please select <b>2 losers<\/b>/);
     });
 
-    it('should record match when losers selection is complete', async () => {
+    it('should ask about dry win when losers selection is complete', async () => {
       const mockMap = new Map();
       mockMap.set(123, {
         userId: 456,
         step: 'select_losers',
+        winners: [
+          { username: 'player1', name: 'Player 1', chatId: '123' },
+          { username: 'player2', name: 'Player 2', chatId: '456' }
+        ],
+        losers: [
+          { username: 'player3', name: 'Player 3', chatId: '789' },
+          { username: 'player4', name: 'Player 4', chatId: '012' }
+        ],
+        timestamp: Date.now()
+      });
+      commandHandlers.__setMatchCreationState(mockMap);
+      
+      const callbackQuery = {
+        message: { chat: { id: 123 } },
+        from: { id: 456 },
+        data: 'continue_selection'
+      };
+      
+      const result = await commandHandlers.handlePlayerSelection(callbackQuery);
+      
+      expect(result.text).toMatch(/Was this a dry win/);
+      expect(result.text).toMatch(/Winners: Player 1, Player 2/);
+      expect(result.text).toMatch(/Losers: Player 3, Player 4/);
+    });
+
+    it('should record match when dry win is selected', async () => {
+      const mockMap = new Map();
+      mockMap.set(123, {
+        userId: 456,
+        step: 'ask_dry_win',
         winners: [
           { username: 'player1', name: 'Player 1', chatId: '123' },
           { username: 'player2', name: 'Player 2', chatId: '456' }
@@ -299,16 +331,18 @@ describe('commandHandlers', () => {
       const callbackQuery = {
         message: { chat: { id: 123 } },
         from: { id: 456 },
-        data: 'continue_selection'
+        data: 'dry_win_yes'
       };
       
       const result = await commandHandlers.handlePlayerSelection(callbackQuery);
       
       expect(result.text).toMatch(/Match Recorded/);
+      expect(result.text).toMatch(/Dry Win/);
       expect(matchService.recordMatch).toHaveBeenCalledWith(
         ['player1', 'player2'],
         ['player3', 'player4'],
-        1
+        1,
+        true
       );
     });
   });
@@ -367,6 +401,86 @@ describe('commandHandlers', () => {
       const result = await commandHandlers.handleLeaderboard(msg);
       expect(result.text).toMatch(/ProPlayer/);
       expect(result.text).toMatch(/b/);
+    });
+  });
+
+  describe('handleSeason', () => {
+    it('should return empty season message when no matches', async () => {
+      seasonService.getSeasonLeaderboard.mockResolvedValue({
+        season: '2024-06',
+        summary: [],
+        categories: {
+          eloGains: [],
+          matchesPlayed: [],
+          dryWins: [],
+          totalWins: [],
+          longestStreak: []
+        }
+      });
+      const msg = {};
+      const result = await commandHandlers.handleSeason(msg);
+      expect(result.text).toMatch(/No matches played this season yet/);
+    });
+
+    it('should return season statistics with tables including points column', async () => {
+      const mockPlayer = { username: 'player1', alias: null };
+      seasonService.getSeasonLeaderboard.mockResolvedValue({
+        season: '2025-08',
+        summary: [
+          { rank: 1, player: mockPlayer, value: 15 }
+        ],
+        categories: {
+          eloGains: [
+            { rank: 1, player: mockPlayer, value: 100 }
+          ],
+          matchesPlayed: [
+            { rank: 1, player: mockPlayer, value: 10 }
+          ],
+          dryWins: [
+            { rank: 1, player: mockPlayer, value: 2 }
+          ],
+          totalWins: [
+            { rank: 1, player: mockPlayer, value: 7 }
+          ],
+          longestStreak: [
+            { rank: 1, player: mockPlayer, value: 3 }
+          ]
+        }
+      });
+      const msg = {};
+      const result = await commandHandlers.handleSeason(msg);
+      expect(result.text).toMatch(/Season 2025-08/);
+      expect(result.text).toMatch(/Season Summary/);
+      expect(result.text).toMatch(/Most Elo Points Gained/);
+      expect(result.text).toMatch(/Most Matches Played/);
+      expect(result.text).toMatch(/Most Dry Wins/);
+      expect(result.text).toMatch(/Most Wins/);
+      expect(result.text).toMatch(/Longest Win Streak/);
+      expect(result.text).toMatch(/player1/);
+      expect(result.text).toMatch(/Points/);
+      expect(result.text).toMatch(/Elo/);
+      expect(result.text).toMatch(/Games/);
+      expect(result.text).toMatch(/Wins/);
+    });
+
+    it('should display alias instead of username when available', async () => {
+      const mockPlayer = { username: 'player1', alias: 'ProPlayer' };
+      seasonService.getSeasonLeaderboard.mockResolvedValue({
+        season: '2024-06',
+        summary: [
+          { rank: 1, player: mockPlayer, value: 15 }
+        ],
+        categories: {
+          eloGains: [],
+          matchesPlayed: [],
+          dryWins: [],
+          totalWins: [],
+          longestStreak: []
+        }
+      });
+      const msg = {};
+      const result = await commandHandlers.handleSeason(msg);
+      expect(result.text).toMatch(/ProPlayer/);
     });
   });
 

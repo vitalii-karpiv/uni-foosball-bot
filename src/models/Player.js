@@ -20,6 +20,11 @@ const playerSchema = new mongoose.Schema({
     default: 1000,
     min: 0
   },
+  seasonStartElo: {
+    type: Map,
+    of: Number,
+    default: new Map()
+  },
   chatId: {
     type: String,
     required: false,

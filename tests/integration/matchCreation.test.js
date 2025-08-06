@@ -93,7 +93,7 @@ describe('Match Creation Integration', () => {
     const loser1Result = await commandHandlers.handlePlayerSelection(selectLoser1Query);
     expect(loser1Result.text).toMatch(/Selected: Player 3/);
 
-    // Step 6: Select second loser
+    // Step 6: Select second loser (should now ask about dry win)
     const selectLoser2Query = {
       message: { chat: { id: 123 } },
       from: { id: 456 },
@@ -101,17 +101,30 @@ describe('Match Creation Integration', () => {
     };
     
     const loser2Result = await commandHandlers.handlePlayerSelection(selectLoser2Query);
-    expect(loser2Result.text).toMatch(/Match Recorded/);
-    expect(loser2Result.text).toMatch(/Winners: @player1 \+ @player2/);
-    expect(loser2Result.text).toMatch(/Losers: @player3 \+ @player4/);
-    expect(loser2Result.text).toMatch(/Winners: \+10, \+12/);
-    expect(loser2Result.text).toMatch(/Losers: -10, -12/);
+    expect(loser2Result.text).toMatch(/Was this a dry win/);
+    expect(loser2Result.text).toMatch(/Winners: Player 1, Player 2/);
+    expect(loser2Result.text).toMatch(/Losers: Player 3, Player 4/);
+
+    // Step 7: Answer dry win question (No)
+    const dryWinQuery = {
+      message: { chat: { id: 123 } },
+      from: { id: 456 },
+      data: 'dry_win_no'
+    };
+    
+    const dryWinResult = await commandHandlers.handlePlayerSelection(dryWinQuery);
+    expect(dryWinResult.text).toMatch(/Match Recorded/);
+    expect(dryWinResult.text).toMatch(/Winners: @player1 \+ @player2/);
+    expect(dryWinResult.text).toMatch(/Losers: @player3 \+ @player4/);
+    expect(dryWinResult.text).toMatch(/Winners: \+10, \+12/);
+    expect(dryWinResult.text).toMatch(/Losers: -10, -12/);
 
     // Verify match was recorded with correct parameters
     expect(matchService.recordMatch).toHaveBeenCalledWith(
       ['player1', 'player2'],
       ['player3', 'player4'],
-      1
+      1,
+      false
     );
 
     // Verify state was cleared
